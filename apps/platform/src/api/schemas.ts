@@ -29,7 +29,9 @@ export const cronPreviewSchema = z.object({
   after: z.iso.datetime().optional(),
 });
 
-export const riskConfirmationSchema = z.object({ confirmRisk: z.boolean().default(false) });
+export const riskConfirmationSchema = z.object({
+  confirmRisk: z.boolean().default(false),
+});
 
 export const resolveExecutionSchema = z.object({
   resolution: z.enum(["confirmed_succeeded", "confirmed_failed", "abandon"]),

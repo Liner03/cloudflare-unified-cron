@@ -37,11 +37,11 @@ web
 
 ## Brand Commitments
 
-名称为 Cloudflare Unified Cron Platform；界面称“Cron Control Center”。默认简体中文，开发字段和状态枚举保留英文。实施规格绑定低装饰、信息密度适中、运维控制台语气；不得使用营销 hero、装饰动画、随机数据或伪造成功指标。
+名称为 Cloudflare Unified Cron Platform；界面称“Cron Control Center”。默认简体中文，开发字段和状态枚举保留英文。工作页保持低装饰、信息密度适中和运维控制台语气；用户后续明确批准 Overview 使用 `gpt-taste` 的 Editorial Split、Gapless Bento 与有目的的 GSAP 动效。所有统计必须来自真实 API，禁止随机数据或伪造成功指标。
 
 ## Evidence on Hand
 
-唯一权威产品证据是 `/Users/lin/Downloads/cloudflare-unified-cron-platform-v1-architecture.md`。仓库包含真实 API、D1 migration、SDK 与示例 Worker；没有品牌 Logo、客户证明、线上性能数据或远程部署凭据，后续工作不得虚构。
+原始架构规格曾由用户通过 `/Users/lin/Downloads/cloudflare-unified-cron-platform-v1-architecture.md` 提供，但该外部路径当前已不可用；仓库内的架构、协议、Cron、部署和运维文档是已提交的派生基线。仓库包含真实 API、D1 migration、SDK 与示例 Worker；没有品牌 Logo、客户证明、线上性能数据或远程部署凭据，后续工作不得虚构。
 
 ## Product Principles
 

@@ -9,7 +9,10 @@ const cronHandler = createCronHandler<Env>({
     idempotent: true,
     payloadSchema: z.object({}),
     run(_payload, context) {
-      return Promise.resolve({ summary: "Worker data is healthy", targetBuildId: context.env.BUILD_ID });
+      return Promise.resolve({
+        summary: "Worker data is healthy",
+        targetBuildId: context.env.BUILD_ID,
+      });
     },
   }),
   syncUsers: defineAction({
@@ -24,7 +27,12 @@ const cronHandler = createCronHandler<Env>({
          VALUES (?, ?, ?, ?)
          ON CONFLICT(idempotency_key) DO NOTHING`,
       )
-        .bind(context.request.idempotencyKey, context.request.action, stored, Date.now())
+        .bind(
+          context.request.idempotencyKey,
+          context.request.action,
+          stored,
+          Date.now(),
+        )
         .run();
       const row = await context.env.BUSINESS_DB.prepare(
         `SELECT result_json FROM idempotent_results WHERE idempotency_key = ? AND action = ?`,

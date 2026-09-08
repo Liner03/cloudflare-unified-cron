@@ -8,17 +8,53 @@ import { AppShell } from "@/components/shared/app-shell";
 import { LoadingState } from "@/components/shared/page-states";
 import "./styles.css";
 
-const OverviewPage = lazy(() => import("@/features/overview/overview-page").then((module) => ({ default: module.OverviewPage })));
-const SchedulesPage = lazy(() => import("@/features/schedules/schedules-page").then((module) => ({ default: module.SchedulesPage })));
-const ScheduleEditorPage = lazy(() => import("@/features/schedules/schedule-editor-page").then((module) => ({ default: module.ScheduleEditorPage })));
-const ScheduleDetailPage = lazy(() => import("@/features/schedules/schedule-detail-page").then((module) => ({ default: module.ScheduleDetailPage })));
-const ExecutionsPage = lazy(() => import("@/features/executions/executions-page").then((module) => ({ default: module.ExecutionsPage })));
-const ExecutionDetailPage = lazy(() => import("@/features/executions/execution-detail-page").then((module) => ({ default: module.ExecutionDetailPage })));
-const TargetsPage = lazy(() => import("@/features/targets/targets-page").then((module) => ({ default: module.TargetsPage })));
-const SystemPage = lazy(() => import("@/features/system/system-page").then((module) => ({ default: module.SystemPage })));
+const OverviewPage = lazy(() =>
+  import("@/features/overview/overview-page").then((module) => ({
+    default: module.OverviewPage,
+  })),
+);
+const SchedulesPage = lazy(() =>
+  import("@/features/schedules/schedules-page").then((module) => ({
+    default: module.SchedulesPage,
+  })),
+);
+const ScheduleEditorPage = lazy(() =>
+  import("@/features/schedules/schedule-editor-page").then((module) => ({
+    default: module.ScheduleEditorPage,
+  })),
+);
+const ScheduleDetailPage = lazy(() =>
+  import("@/features/schedules/schedule-detail-page").then((module) => ({
+    default: module.ScheduleDetailPage,
+  })),
+);
+const ExecutionsPage = lazy(() =>
+  import("@/features/executions/executions-page").then((module) => ({
+    default: module.ExecutionsPage,
+  })),
+);
+const ExecutionDetailPage = lazy(() =>
+  import("@/features/executions/execution-detail-page").then((module) => ({
+    default: module.ExecutionDetailPage,
+  })),
+);
+const TargetsPage = lazy(() =>
+  import("@/features/targets/targets-page").then((module) => ({
+    default: module.TargetsPage,
+  })),
+);
+const SystemPage = lazy(() =>
+  import("@/features/system/system-page").then((module) => ({
+    default: module.SystemPage,
+  })),
+);
 
 function load(element: ReactNode) {
-  return <Suspense fallback={<LoadingState label="正在加载页面" />}>{element}</Suspense>;
+  return (
+    <Suspense fallback={<LoadingState label="正在加载页面" />}>
+      {element}
+    </Suspense>
+  );
 }
 
 const queryClient = new QueryClient({

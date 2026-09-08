@@ -9,9 +9,9 @@
       "binding": "BUSINESS_DB",
       "database_name": "worker-data-local-db",
       "database_id": "00000000-0000-0000-0000-000000000002",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "vars": { "BUILD_ID": "local" },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
 }

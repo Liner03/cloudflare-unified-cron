@@ -1,13 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { canAutomaticallyRetry, retryDelayMs } from "../src/domain/model";
+import {
+  canAutomaticallyRetry,
+  retryDelayMs,
+  systemClock,
+} from "../src/domain/model";
 
-const policy = { maxAttempts: 3, delaysSeconds: [60, 300], retryOnUnknown: false };
+const policy = {
+  maxAttempts: 3,
+  delaysSeconds: [60, 300],
+  retryOnUnknown: false,
+};
 
 describe("retry policy", () => {
   it("uses the delay following the completed attempt", () => {
     expect(retryDelayMs(policy, 1)).toBe(60_000);
     expect(retryDelayMs(policy, 2)).toBe(300_000);
     expect(retryDelayMs(policy, 3)).toBeNull();
+    expect(retryDelayMs({ ...policy, delaysSeconds: [] }, 1)).toBeNull();
+    expect(systemClock.nowMs()).toBeGreaterThan(0);
   });
 
   it("requires both snapshot and current capability to be idempotent", () => {
@@ -22,8 +32,15 @@ describe("retry policy", () => {
       retryDeadlineAt: 2000,
     };
     expect(canAutomaticallyRetry(base)).toBe(true);
-    expect(canAutomaticallyRetry({ ...base, currentIdempotent: false })).toBe(false);
-    expect(canAutomaticallyRetry({ ...base, snapshotIdempotent: false })).toBe(false);
+    expect(canAutomaticallyRetry({ ...base, currentIdempotent: false })).toBe(
+      false,
+    );
+    expect(canAutomaticallyRetry({ ...base, snapshotIdempotent: false })).toBe(
+      false,
+    );
+    expect(canAutomaticallyRetry({ ...base, completedAttemptNumber: 3 })).toBe(
+      false,
+    );
   });
 
   it("does not retry unknown outcomes unless explicitly enabled", () => {
@@ -38,7 +55,18 @@ describe("retry policy", () => {
       retryDeadlineAt: 2000,
     };
     expect(canAutomaticallyRetry(input)).toBe(false);
-    expect(canAutomaticallyRetry({ ...input, policy: { ...policy, retryOnUnknown: true } })).toBe(true);
-    expect(canAutomaticallyRetry({ ...input, policy: { ...policy, retryOnUnknown: true }, nowMs: 2000 })).toBe(false);
+    expect(
+      canAutomaticallyRetry({
+        ...input,
+        policy: { ...policy, retryOnUnknown: true },
+      }),
+    ).toBe(true);
+    expect(
+      canAutomaticallyRetry({
+        ...input,
+        policy: { ...policy, retryOnUnknown: true },
+        nowMs: 2000,
+      }),
+    ).toBe(false);
   });
 });

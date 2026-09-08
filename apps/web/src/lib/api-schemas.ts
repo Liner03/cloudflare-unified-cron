@@ -58,26 +58,26 @@ export const overviewSchema = z.object({
   meta: z.object({ serverTime: z.string() }),
 });
 
-export const schedulesSchema = z.object({ data: z.array(scheduleSummarySchema) });
+export const schedulesSchema = z.object({
+  data: z.array(scheduleSummarySchema),
+});
 
 export const scheduleDetailSchema = z.object({
-  data: scheduleSummarySchema
-    .omit({ lastExecution: true })
-    .extend({
-      archivedAt: z.string().nullable(),
-      payload: z.unknown(),
-      retryPolicy: z.object({
-        maxAttempts: z.number(),
-        delaysSeconds: z.array(z.number()),
-        retryOnUnknown: z.boolean(),
-      }),
-      timeoutMs: z.number(),
-      misfirePolicy: z.string(),
-      misfireGraceSeconds: z.number(),
-      createdAt: z.string().nullable(),
-      updatedAt: z.string().nullable(),
-      recentExecutions: z.array(executionSummarySchema),
+  data: scheduleSummarySchema.omit({ lastExecution: true }).extend({
+    archivedAt: z.string().nullable(),
+    payload: z.unknown(),
+    retryPolicy: z.object({
+      maxAttempts: z.number(),
+      delaysSeconds: z.array(z.number()),
+      retryOnUnknown: z.boolean(),
     }),
+    timeoutMs: z.number(),
+    misfirePolicy: z.string(),
+    misfireGraceSeconds: z.number(),
+    createdAt: z.string().nullable(),
+    updatedAt: z.string().nullable(),
+    recentExecutions: z.array(executionSummarySchema),
+  }),
 });
 
 export const targetsSchema = z.object({
@@ -143,7 +143,7 @@ export const executionDetailSchema = z.object({
     scheduledFor: z.string().nullable(),
     parentExecutionId: z.string().nullable(),
     scheduleRevision: z.number(),
-    snapshot: z.unknown(),
+    snapshot: z.object({ targetActionIdempotent: z.boolean() }).passthrough(),
     status: z.string(),
     reasonCode: z.string().nullable(),
     availableAt: z.string().nullable(),
@@ -192,7 +192,9 @@ export const executionMutationSchema = z.object({
   data: z.object({ executionId: z.string(), status: z.string() }).passthrough(),
 });
 
-export const stateMutationSchema = z.object({ data: z.record(z.string(), z.unknown()) });
+export const stateMutationSchema = z.object({
+  data: z.record(z.string(), z.unknown()),
+});
 
 export const previewSchema = z.object({
   data: z.array(z.object({ utc: z.string(), local: z.string() })),

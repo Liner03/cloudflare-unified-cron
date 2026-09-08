@@ -4,10 +4,15 @@ const MAX_EXPRESSION_LENGTH = 128;
 const MAX_SEARCH_YEARS = 8;
 const ATOM = "(?:\\*|\\d+(?:-\\d+)?)(?:/\\d+)?";
 const FIELD = `${ATOM}(?:,${ATOM})*`;
-const FIVE_FIELDS = new RegExp(`^${FIELD}\\s+${FIELD}\\s+${FIELD}\\s+${FIELD}\\s+${FIELD}$`);
+const FIVE_FIELDS = new RegExp(
+  `^${FIELD}\\s+${FIELD}\\s+${FIELD}\\s+${FIELD}\\s+${FIELD}$`,
+);
 
 export class CronValidationError extends Error {
-  constructor(readonly code: string, message: string) {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
     super(message);
     this.name = "CronValidationError";
   }
@@ -18,10 +23,18 @@ export class CronCalculator {
     return this.preview(expression, timezone, afterMs, 1)[0] as number;
   }
 
-  preview(expression: string, timezone: string, afterMs: number, count: number): number[] {
+  preview(
+    expression: string,
+    timezone: string,
+    afterMs: number,
+    count: number,
+  ): number[] {
     const normalized = validateCronExpression(expression);
     if (!Number.isInteger(count) || count < 1 || count > 10) {
-      throw new CronValidationError("INVALID_PREVIEW_COUNT", "预览数量必须为 1..10");
+      throw new CronValidationError(
+        "INVALID_PREVIEW_COUNT",
+        "预览数量必须为 1..10",
+      );
     }
     assertTimezone(timezone);
     const endDate = new Date(afterMs);
@@ -37,7 +50,10 @@ export class CronCalculator {
       for (let index = 0; index < count; index += 1) {
         const next = interval.next().getTime();
         if (next <= afterMs) {
-          throw new CronValidationError("CRON_NOT_STRICTLY_FUTURE", "Cron 计算结果不是未来时间");
+          throw new CronValidationError(
+            "CRON_NOT_STRICTLY_FUTURE",
+            "Cron 计算结果不是未来时间",
+          );
         }
         result.push(next);
       }
@@ -55,7 +71,10 @@ export class CronCalculator {
 export function validateCronExpression(expression: string): string {
   const normalized = expression.trim().replace(/\s+/g, " ");
   if (normalized.length === 0 || normalized.length > MAX_EXPRESSION_LENGTH) {
-    throw new CronValidationError("INVALID_CRON_LENGTH", "Cron 表达式长度必须为 1..128");
+    throw new CronValidationError(
+      "INVALID_CRON_LENGTH",
+      "Cron 表达式长度必须为 1..128",
+    );
   }
   if (!FIVE_FIELDS.test(normalized)) {
     throw new CronValidationError(
@@ -80,8 +99,13 @@ function assertTimezone(timezone: string): void {
     throw new CronValidationError("INVALID_TIMEZONE", "时区长度不合法");
   }
   try {
-    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date(0));
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(
+      new Date(0),
+    );
   } catch {
-    throw new CronValidationError("INVALID_TIMEZONE", "必须使用有效的 IANA 时区");
+    throw new CronValidationError(
+      "INVALID_TIMEZONE",
+      "必须使用有效的 IANA 时区",
+    );
   }
 }

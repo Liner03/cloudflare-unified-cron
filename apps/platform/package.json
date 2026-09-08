@@ -9,8 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "types": "wrangler types --config wrangler.local.jsonc worker-configuration.d.ts",
     "test": "vitest run --config vitest.unit.config.ts",
-    "test:unit": "vitest run --config vitest.unit.config.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:unit": "vitest run --coverage --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts && vitest run --config vitest.auth.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply unified-cron-platform-local-db --local --config wrangler.local.jsonc",
     "seed:local": "wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file seed/local.sql",
     "targets:sync:local": "wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file seed/targets.sql",
@@ -28,6 +28,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.1.5",
     "@cloudflare/workers-types": "5.20260908.1",
+    "@vitest/coverage-v8": "4.1.11",
     "vitest": "4.1.11",
     "wrangler": "4.129.1"
   }

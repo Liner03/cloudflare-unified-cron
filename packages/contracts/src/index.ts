@@ -1,12 +1,7 @@
 import { z } from "zod";
 
 export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
@@ -156,10 +151,15 @@ export function assertResultWithinLimits(result: CronResultV1): void {
     if (stringByteLength(result.summary) > LIMITS.summaryBytes) {
       throw new Error("RPC_RESULT_SUMMARY_TOO_LARGE");
     }
-    if (result.output !== undefined && jsonByteLength(result.output) > LIMITS.outputBytes) {
+    if (
+      result.output !== undefined &&
+      jsonByteLength(result.output) > LIMITS.outputBytes
+    ) {
       throw new Error("RPC_RESULT_OUTPUT_TOO_LARGE");
     }
-  } else if (stringByteLength(result.error.message) > LIMITS.errorMessageBytes) {
+  } else if (
+    stringByteLength(result.error.message) > LIMITS.errorMessageBytes
+  ) {
     throw new Error("RPC_RESULT_ERROR_TOO_LARGE");
   }
 }

@@ -5,7 +5,12 @@ const errorEnvelopeSchema = z.object({
     code: z.string(),
     message: z.string(),
     requestId: z.string(),
-    details: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+    details: z
+      .record(
+        z.string(),
+        z.union([z.string(), z.number(), z.boolean(), z.null()]),
+      )
+      .optional(),
   }),
 });
 
@@ -26,21 +31,30 @@ export async function apiGet<Schema extends z.ZodType>(
   schema: Schema,
   signal?: AbortSignal,
 ): Promise<z.output<Schema>> {
-  return request(path, schema, { method: "GET", ...(signal === undefined ? {} : { signal }) });
+  return request(path, schema, {
+    method: "GET",
+    ...(signal === undefined ? {} : { signal }),
+  });
 }
 
 export async function apiMutate<Schema extends z.ZodType>(
   path: string,
   body: unknown,
   schema: Schema,
-  options: { method?: "POST" | "PATCH"; revision?: number; idempotencyKey?: string } = {},
+  options: {
+    method?: "POST" | "PATCH";
+    revision?: number;
+    idempotencyKey?: string;
+  } = {},
 ): Promise<z.output<Schema>> {
   return request(path, schema, {
     method: options.method ?? "POST",
     headers: {
       "Content-Type": "application/json",
       "Idempotency-Key": options.idempotencyKey ?? `ui:${crypto.randomUUID()}`,
-      ...(options.revision === undefined ? {} : { "If-Match": `"${options.revision}"` }),
+      ...(options.revision === undefined
+        ? {}
+        : { "If-Match": `"${options.revision}"` }),
     },
     body: JSON.stringify(body),
   });
@@ -56,7 +70,12 @@ async function request<Schema extends z.ZodType>(
   try {
     value = await response.json();
   } catch {
-    throw new ApiClientError(response.status, "INVALID_API_RESPONSE", "服务器返回了非 JSON 响应", "unknown");
+    throw new ApiClientError(
+      response.status,
+      "INVALID_API_RESPONSE",
+      "服务器返回了非 JSON 响应",
+      "unknown",
+    );
   }
   if (!response.ok) {
     const error = errorEnvelopeSchema.safeParse(value);
@@ -68,11 +87,21 @@ async function request<Schema extends z.ZodType>(
         error.data.error.requestId,
       );
     }
-    throw new ApiClientError(response.status, "API_ERROR", `请求失败（HTTP ${response.status}）`, "unknown");
+    throw new ApiClientError(
+      response.status,
+      "API_ERROR",
+      `请求失败（HTTP ${response.status}）`,
+      "unknown",
+    );
   }
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
-    throw new ApiClientError(response.status, "INVALID_API_SCHEMA", "服务器响应结构与当前控制台不兼容", "unknown");
+    throw new ApiClientError(
+      response.status,
+      "INVALID_API_SCHEMA",
+      "服务器响应结构与当前控制台不兼容",
+      "unknown",
+    );
   }
   return parsed.data;
 }

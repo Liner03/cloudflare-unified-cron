@@ -8,7 +8,7 @@ import {
 import { z } from "zod";
 import type { ScheduleSnapshot } from "../domain/model";
 import { CronCalculator } from "../infrastructure/cron/cron-calculator";
-import { getTargetManifest } from "../targets.manifest";
+import { resolveTargetCapability } from "../targets.manifest";
 import { ApiError } from "./errors";
 import type { ScheduleInput } from "./schemas";
 
@@ -36,7 +36,10 @@ const scheduleRowSchema = z.object({
 
 export type ScheduleRow = z.infer<typeof scheduleRowSchema>;
 
-export async function readSchedule(db: D1Database, id: string): Promise<ScheduleRow> {
+export async function readSchedule(
+  db: D1Database,
+  id: string,
+): Promise<ScheduleRow> {
   const value = await db
     .prepare(
       `SELECT id, name, description, target_id, action, action_version,
@@ -69,35 +72,66 @@ export function scheduleRowToInput(row: ScheduleRow): ScheduleInput {
   };
 }
 
-export function validateScheduleInput(input: ScheduleInput, cron: CronCalculator, nowMs: number) {
+export function validateScheduleInput(
+  input: ScheduleInput,
+  cron: CronCalculator,
+  nowMs: number,
+) {
   if (jsonByteLength(input.payload) > LIMITS.payloadBytes) {
-    throw new ApiError(422, "PAYLOAD_TOO_LARGE", "Schedule payload 不得超过 16 KiB");
+    throw new ApiError(
+      422,
+      "PAYLOAD_TOO_LARGE",
+      "Schedule payload 不得超过 16 KiB",
+    );
   }
-  const target = getTargetManifest(input.targetId);
-  const action = target?.actions.find(
-    (candidate) => candidate.name === input.action && candidate.version === input.actionVersion,
+  const capability = resolveTargetCapability(
+    input.targetId,
+    input.action,
+    input.actionVersion,
   );
-  if (!target || !action) {
-    throw new ApiError(422, "TARGET_ACTION_NOT_DECLARED", "Target、Action 或版本不在部署白名单中");
+  if (!capability) {
+    throw new ApiError(
+      422,
+      "TARGET_ACTION_NOT_DECLARED",
+      "Target、Action 或版本不在部署白名单中",
+    );
   }
+  const { target, action } = capability;
   if (input.retryPolicy.maxAttempts > 1 && !action.idempotent) {
-    throw new ApiError(422, "NON_IDEMPOTENT_RETRY_FORBIDDEN", "非幂等 Action 不允许自动重试");
+    throw new ApiError(
+      422,
+      "NON_IDEMPOTENT_RETRY_FORBIDDEN",
+      "非幂等 Action 不允许自动重试",
+    );
   }
   if (input.retryPolicy.retryOnUnknown && !action.idempotent) {
-    throw new ApiError(422, "NON_IDEMPOTENT_UNKNOWN_RETRY_FORBIDDEN", "非幂等 Action 不允许重试未知结果");
+    throw new ApiError(
+      422,
+      "NON_IDEMPOTENT_UNKNOWN_RETRY_FORBIDDEN",
+      "非幂等 Action 不允许重试未知结果",
+    );
   }
   const nextRunAt = cron.nextAfter(input.cronExpression, input.timezone, nowMs);
   return { target, action, nextRunAt };
 }
 
-export function buildScheduleSnapshot(input: ScheduleInput, revision: number): ScheduleSnapshot {
-  const target = getTargetManifest(input.targetId);
-  const action = target?.actions.find(
-    (candidate) => candidate.name === input.action && candidate.version === input.actionVersion,
+export function buildScheduleSnapshot(
+  input: ScheduleInput,
+  revision: number,
+): ScheduleSnapshot {
+  const capability = resolveTargetCapability(
+    input.targetId,
+    input.action,
+    input.actionVersion,
   );
-  if (!target || !action) {
-    throw new ApiError(422, "TARGET_ACTION_NOT_DECLARED", "Target、Action 或版本不在部署白名单中");
+  if (!capability) {
+    throw new ApiError(
+      422,
+      "TARGET_ACTION_NOT_DECLARED",
+      "Target、Action 或版本不在部署白名单中",
+    );
   }
+  const { target, action } = capability;
   return {
     scheduleId: "",
     scheduleRevision: revision,
@@ -139,11 +173,20 @@ export function serializeSchedule(row: ScheduleRow) {
 }
 
 export function requireRevision(header: string | undefined): number {
-  if (!header) throw new ApiError(422, "IF_MATCH_REQUIRED", "修改计划需要 If-Match revision");
+  if (!header)
+    throw new ApiError(
+      422,
+      "IF_MATCH_REQUIRED",
+      "修改计划需要 If-Match revision",
+    );
   const match = /^(?:W\/)?"(\d+)"$/.exec(header.trim());
   const revision = match?.[1] === undefined ? Number.NaN : Number(match[1]);
   if (!Number.isInteger(revision) || revision < 1) {
-    throw new ApiError(422, "IF_MATCH_INVALID", 'If-Match 格式应为 "<revision>"');
+    throw new ApiError(
+      422,
+      "IF_MATCH_INVALID",
+      'If-Match 格式应为 "<revision>"',
+    );
   }
   return revision;
 }

@@ -9,8 +9,8 @@
       "binding": "DB",
       "database_name": "unified-cron-platform-test-db",
       "database_id": "00000000-0000-0000-0000-000000000003",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "vars": {
     "APP_ENV": "test",
@@ -19,6 +19,6 @@
     "ACCESS_AUD": "test",
     "PUBLIC_ORIGIN": "http://localhost:8787",
     "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000003",
-    "BUILD_VERSION": "test"
-  }
+    "BUILD_VERSION": "test",
+  },
 }

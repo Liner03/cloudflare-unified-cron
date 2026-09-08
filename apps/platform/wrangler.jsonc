@@ -12,22 +12,22 @@
     "directory": "../web/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api", "/api/*"]
+    "run_worker_first": ["/api", "/api/*"],
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "unified-cron-platform-db",
       "database_id": "REPLACE_WITH_D1_DATABASE_ID",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "services": [
     {
       "binding": "CRON_DATA",
       "service": "worker-data",
-      "entrypoint": "CronEntrypoint"
-    }
+      "entrypoint": "CronEntrypoint",
+    },
   ],
   "vars": {
     "APP_ENV": "production",
@@ -36,7 +36,7 @@
     "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUDIENCE",
     "PUBLIC_ORIGIN": "https://cron.example.com",
     "PLATFORM_INSTANCE_ID": "REPLACE_WITH_STABLE_UUID",
-    "BUILD_VERSION": "REPLACE_WITH_BUILD_VERSION"
+    "BUILD_VERSION": "REPLACE_WITH_BUILD_VERSION",
   },
-  "observability": { "enabled": true, "head_sampling_rate": 1 }
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
 }

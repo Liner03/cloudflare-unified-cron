@@ -7,7 +7,7 @@ import {
   type ScheduleSnapshot,
 } from "../../domain/model";
 import { CronCalculator } from "../cron/cron-calculator";
-import { getTargetManifest } from "../../targets.manifest";
+import { resolveTargetCapability } from "../../targets.manifest";
 
 const AUTOMATIC_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LEASE_MS = 90_000;
@@ -48,7 +48,11 @@ export type ReadyExecution = z.infer<typeof readyExecutionSchema>;
 
 const claimedExecutionSchema = readyExecutionSchema
   .omit({ available_at: true, created_at: true })
-  .extend({ lease_token: z.string(), attempt_id: z.string(), deadline_at: z.number() });
+  .extend({
+    lease_token: z.string(),
+    attempt_id: z.string(),
+    deadline_at: z.number(),
+  });
 
 export type ClaimedExecution = z.infer<typeof claimedExecutionSchema>;
 
@@ -97,7 +101,13 @@ export class ExecutionRepository {
          WHERE id = 1
          RETURNING dispatch_paused`,
       )
-      .bind(input.tickId, input.scheduledAt, input.startedAt, input.buildVersion, input.startedAt)
+      .bind(
+        input.tickId,
+        input.scheduledAt,
+        input.startedAt,
+        input.buildVersion,
+        input.startedAt,
+      )
       .first<{ dispatch_paused: number }>();
     if (!row) throw new Error("PLATFORM_STATE_MISSING");
     return { dispatchPaused: row.dispatch_paused === 1 };
@@ -143,7 +153,10 @@ export class ExecutionRepository {
       .bind(
         nowMs,
         nowMs,
-        JSON.stringify({ code: "AUTOMATIC_RETRY_WINDOW_EXPIRED", message: "自动重试的 24 小时窗口已结束" }),
+        JSON.stringify({
+          code: "AUTOMATIC_RETRY_WINDOW_EXPIRED",
+          message: "自动重试的 24 小时窗口已结束",
+        }),
         nowMs,
         nowMs,
       )
@@ -168,16 +181,24 @@ export class ExecutionRepository {
   }
 
   async materializeDue(row: DueScheduleRow, nowMs: number): Promise<boolean> {
-    const target = getTargetManifest(row.target_id);
-    const action = target?.actions.find(
-      (candidate) => candidate.name === row.action && candidate.version === row.action_version,
+    const capability = resolveTargetCapability(
+      row.target_id,
+      row.action,
+      row.action_version,
     );
-    if (!target || !action) {
-      await this.disableInvalidSchedule(row, nowMs, "TARGET_ACTION_NOT_DECLARED");
+    if (!capability) {
+      await this.disableInvalidSchedule(
+        row,
+        nowMs,
+        "TARGET_ACTION_NOT_DECLARED",
+      );
       return false;
     }
+    const { target, action } = capability;
 
-    const retryPolicy = retryPolicySchema.parse(JSON.parse(row.retry_policy_json));
+    const retryPolicy = retryPolicySchema.parse(
+      JSON.parse(row.retry_policy_json),
+    );
     const payload = jsonValueSchema.parse(JSON.parse(row.payload_json));
     const snapshot: ScheduleSnapshot = {
       scheduleId: row.id,
@@ -193,11 +214,16 @@ export class ExecutionRepository {
       cronExpression: row.cron_expression,
       timezone: row.timezone,
     };
-    const nextRunAt = this.cron.nextAfter(row.cron_expression, row.timezone, nowMs);
+    const nextRunAt = this.cron.nextAfter(
+      row.cron_expression,
+      row.timezone,
+      nowMs,
+    );
     const executionId = crypto.randomUUID();
     const dedupeKey = `cron:${row.id}:${row.next_run_at}`;
     const isMisfire =
-      row.misfire_policy === "skip" && nowMs - row.next_run_at > row.misfire_grace_seconds * 1000;
+      row.misfire_policy === "skip" &&
+      nowMs - row.next_run_at > row.misfire_grace_seconds * 1000;
 
     const statements = [
       this.db
@@ -206,7 +232,7 @@ export class ExecutionRepository {
              id, schedule_id, target_id, source, scheduled_for, dedupe_key,
              schedule_revision, snapshot_json, status, reason_code, coalesced_until,
              available_at, next_attempt_reason, attempt_limit, max_auto_attempts,
-             retry_deadline_at, created_at, updated_at
+             retry_deadline_at, finished_at, created_at, updated_at
            )
            SELECT ?, s.id, s.target_id, 'cron', s.next_run_at, ?, s.revision, ?,
              CASE
@@ -230,7 +256,17 @@ export class ExecutionRepository {
                ELSE NULL
              END,
              CASE WHEN s.misfire_policy = 'coalesce' AND s.next_run_at < ? THEN ? ELSE NULL END,
-             ?, 'initial', ?, ?, ?, ?, ?
+             ?, 'initial', ?, ?, ?,
+             CASE
+               WHEN t.enabled = 0 OR ? = 1 THEN ?
+               WHEN EXISTS (
+                 SELECT 1 FROM executions active
+                 WHERE active.schedule_id = s.id
+                   AND active.status IN ('pending', 'running', 'retry_wait', 'unknown')
+               ) THEN ?
+               ELSE NULL
+             END,
+             ?, ?
            FROM schedules s
            JOIN targets t ON t.id = s.target_id
            WHERE s.id = ? AND s.revision = ? AND s.next_run_at = ?
@@ -251,6 +287,9 @@ export class ExecutionRepository {
           retryPolicy.maxAttempts,
           retryPolicy.maxAttempts,
           nowMs + AUTOMATIC_RETRY_WINDOW_MS,
+          isMisfire ? 1 : 0,
+          nowMs,
+          nowMs,
           nowMs,
           nowMs,
           row.id,
@@ -302,7 +341,10 @@ export class ExecutionRepository {
     return z.array(readyExecutionSchema).parse(result.results);
   }
 
-  async claim(row: ReadyExecution, nowMs: number): Promise<ClaimedExecution | null> {
+  async claim(
+    row: ReadyExecution,
+    nowMs: number,
+  ): Promise<ClaimedExecution | null> {
     const snapshot = parseSnapshot(row.snapshot_json);
     const leaseToken = crypto.randomUUID();
     const attemptId = crypto.randomUUID();
@@ -338,12 +380,22 @@ export class ExecutionRepository {
     ]);
     const claimed = result[0]?.results[0];
     if (!claimed || result[1]?.results.length !== 1) return null;
-    return claimedExecutionSchema.parse({ ...claimed, attempt_id: attemptId, deadline_at: deadlineAt });
+    return claimedExecutionSchema.parse({
+      ...claimed,
+      attempt_id: attemptId,
+      deadline_at: deadlineAt,
+    });
   }
 
-  async finalize(claim: ClaimedExecution, decision: FinalizeDecision, finishedAt: number): Promise<boolean> {
+  async finalize(
+    claim: ClaimedExecution,
+    decision: FinalizeDecision,
+    finishedAt: number,
+  ): Promise<boolean> {
     const attemptPayload =
-      decision.attemptStatus === "succeeded" ? decision.resultJson : decision.errorJson;
+      decision.attemptStatus === "succeeded"
+        ? decision.resultJson
+        : decision.errorJson;
     const result = await this.db.batch([
       this.db
         .prepare(
@@ -387,7 +439,9 @@ export class ExecutionRepository {
         )
         .bind(
           decision.executionStatus,
-          decision.executionStatus === "retry_wait" ? "AUTOMATIC_RETRY_SCHEDULED" : null,
+          decision.executionStatus === "retry_wait"
+            ? "AUTOMATIC_RETRY_SCHEDULED"
+            : null,
           decision.availableAt,
           decision.nextAttemptReason,
           decision.executionStatus,
@@ -425,9 +479,11 @@ export class ExecutionRepository {
     let recovered = 0;
     for (const value of z.array(expiredLeaseSchema).parse(rows.results)) {
       const snapshot = parseSnapshot(value.snapshot_json);
-      const current = getTargetManifest(value.target_id)?.actions.find(
-        (action) => action.name === snapshot.action && action.version === snapshot.actionVersion,
-      );
+      const current = resolveTargetCapability(
+        value.target_id,
+        snapshot.action,
+        snapshot.actionVersion,
+      )?.action;
       const retry = canAutomaticallyRetry({
         policy: snapshot.retryPolicy,
         snapshotIdempotent: snapshot.targetActionIdempotent,
@@ -438,7 +494,9 @@ export class ExecutionRepository {
         nowMs,
         retryDeadlineAt: value.retry_deadline_at,
       });
-      const delay = retry ? retryDelayMs(snapshot.retryPolicy, value.attempt_count) : null;
+      const delay = retry
+        ? retryDelayMs(snapshot.retryPolicy, value.attempt_count)
+        : null;
       const claim = claimedExecutionSchema.parse({
         id: value.id,
         schedule_id: snapshot.scheduleId,
@@ -475,7 +533,9 @@ export class ExecutionRepository {
     return recovered;
   }
 
-  async cleanupHistory(nowMs: number): Promise<{ executions: number; audit: number; idempotency: number }> {
+  async cleanupHistory(
+    nowMs: number,
+  ): Promise<{ executions: number; audit: number; idempotency: number }> {
     const successCutoff = nowMs - 14 * 24 * 60 * 60 * 1000;
     const failureCutoff = nowMs - 30 * 24 * 60 * 60 * 1000;
     const auditCutoff = nowMs - 90 * 24 * 60 * 60 * 1000;
@@ -485,7 +545,10 @@ export class ExecutionRepository {
           `DELETE FROM executions
            WHERE id IN (
              SELECT id FROM executions
-             WHERE (status IN ('succeeded', 'skipped', 'cancelled') AND finished_at < ?)
+             WHERE (
+               status IN ('succeeded', 'skipped', 'cancelled')
+               AND COALESCE(finished_at, created_at) < ?
+             )
                 OR (status = 'failed' AND finished_at < ?)
              ORDER BY finished_at, id LIMIT 50
            )`,
@@ -526,7 +589,14 @@ export class ExecutionRepository {
            FROM schedules
            WHERE id = ? AND revision = ? AND next_run_at = ? AND enabled = 1`,
         )
-        .bind(crypto.randomUUID(), JSON.stringify({ reason }), nowMs, row.id, row.revision, row.next_run_at),
+        .bind(
+          crypto.randomUUID(),
+          JSON.stringify({ reason }),
+          nowMs,
+          row.id,
+          row.revision,
+          row.next_run_at,
+        ),
       this.db
         .prepare(
           `UPDATE schedules SET enabled = 0, next_run_at = NULL, revision = revision + 1, updated_at = ?
@@ -575,9 +645,12 @@ export function makeFailureDecision(input: {
     nowMs: input.nowMs,
     retryDeadlineAt: input.retryDeadlineAt,
   });
-  const delay = canRetry ? retryDelayMs(input.snapshot.retryPolicy, input.attemptNumber) : null;
+  const delay = canRetry
+    ? retryDelayMs(input.snapshot.retryPolicy, input.attemptNumber)
+    : null;
   return {
-    executionStatus: delay === null ? (input.unknown ? "unknown" : "failed") : "retry_wait",
+    executionStatus:
+      delay === null ? (input.unknown ? "unknown" : "failed") : "retry_wait",
     attemptStatus: input.unknown ? "unknown" : "failed",
     availableAt: delay === null ? input.nowMs : input.nowMs + delay,
     nextAttemptReason: delay === null ? "initial" : "automatic_retry",

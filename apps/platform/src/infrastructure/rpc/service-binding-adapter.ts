@@ -12,7 +12,10 @@ import type { CronEntrypointBase } from "@unified-cron/worker-sdk/entrypoint";
 export class ServiceBindingAdapter {
   constructor(private readonly env: Env) {}
 
-  async execute(target: TargetManifest, request: CronRequestV1): Promise<CronResultV1> {
+  async execute(
+    target: TargetManifest,
+    request: CronRequestV1,
+  ): Promise<CronResultV1> {
     const binding = this.bindingFor(target.binding);
     const value = await Promise.resolve(binding.cron(request));
     const result = cronResultV1Schema.parse(value);
@@ -27,8 +30,13 @@ export class ServiceBindingAdapter {
     );
   }
 
-  private bindingFor(bindingName: string): Service<CronEntrypointBase<Record<string, never>>> {
-    if (bindingName !== "CRON_DATA") throw new Error("TARGET_BINDING_NOT_CONFIGURED");
-    return this.env.CRON_DATA as Service<CronEntrypointBase<Record<string, never>>>;
+  private bindingFor(
+    bindingName: string,
+  ): Service<CronEntrypointBase<Record<string, never>>> {
+    if (bindingName !== "CRON_DATA")
+      throw new Error("TARGET_BINDING_NOT_CONFIGURED");
+    return this.env.CRON_DATA as Service<
+      CronEntrypointBase<Record<string, never>>
+    >;
   }
 }

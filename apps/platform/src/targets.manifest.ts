@@ -30,6 +30,26 @@ export const TARGETS = [
   },
 ] satisfies TargetManifest[];
 
-export function getTargetManifest(targetId: string): TargetManifest | undefined {
+export function getTargetManifest(
+  targetId: string,
+): TargetManifest | undefined {
   return TARGETS.find((target) => target.id === targetId);
+}
+
+export interface TargetCapability {
+  target: TargetManifest;
+  action: TargetManifest["actions"][number];
+}
+
+export function resolveTargetCapability(
+  targetId: string,
+  actionName: string,
+  actionVersion: number,
+): TargetCapability | undefined {
+  const target = getTargetManifest(targetId);
+  const action = target?.actions.find(
+    (candidate) =>
+      candidate.name === actionName && candidate.version === actionVersion,
+  );
+  return target && action ? { target, action } : undefined;
 }

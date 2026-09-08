@@ -9,15 +9,15 @@
       "binding": "DB",
       "database_name": "unified-cron-platform-local-db",
       "database_id": "00000000-0000-0000-0000-000000000001",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "services": [
     {
       "binding": "CRON_DATA",
       "service": "worker-data-local",
-      "entrypoint": "CronEntrypoint"
-    }
+      "entrypoint": "CronEntrypoint",
+    },
   ],
   "vars": {
     "APP_ENV": "development",
@@ -26,7 +26,7 @@
     "ACCESS_AUD": "local",
     "PUBLIC_ORIGIN": "http://127.0.0.1:5173",
     "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000001",
-    "BUILD_VERSION": "local"
+    "BUILD_VERSION": "local",
   },
-  "observability": { "enabled": true, "head_sampling_rate": 1 }
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
 }

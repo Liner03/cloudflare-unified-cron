@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "types": "wrangler types --config wrangler.local.jsonc worker-configuration.d.ts",
     "db:migrate:local": "wrangler d1 migrations apply worker-data-local-db --local --config wrangler.local.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply BUSINESS_DB --remote --config wrangler.jsonc",
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {

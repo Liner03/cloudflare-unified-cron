@@ -56,21 +56,49 @@ export function defineAction<Env, Payload extends JsonValue>(
 }
 
 type AnyAction<Env> = ActionDefinition<Env, JsonValue>;
+type ActionRegistration<Env> = AnyAction<Env> | AnyAction<Env>[];
 
 export interface CronHandler<Env> {
-  cron(input: unknown, runtime: { env: Env; ctx: ExecutionContext }): Promise<CronResultV1>;
+  cron(
+    input: unknown,
+    runtime: { env: Env; ctx: ExecutionContext },
+  ): Promise<CronResultV1>;
   describe(): CronTargetDescriptionV1;
 }
 
-export function createCronHandler<Env>(actions: Record<string, AnyAction<Env>>): CronHandler<Env> {
+export function createCronHandler<Env>(
+  actions: Record<string, ActionRegistration<Env>>,
+): CronHandler<Env> {
+  const registry = new Map<
+    string,
+    { name: string; definition: AnyAction<Env> }
+  >();
+  for (const [name, registration] of Object.entries(actions)) {
+    const definitions = Array.isArray(registration)
+      ? registration
+      : [registration];
+    if (definitions.length === 0) {
+      throw new Error(`Action ${name} must register at least one version`);
+    }
+    for (const definition of definitions) {
+      const key = actionKey(name, definition.version);
+      if (registry.has(key)) {
+        throw new Error(
+          `Duplicate action registration: ${name} v${definition.version}`,
+        );
+      }
+      registry.set(key, { name, definition });
+    }
+  }
+
   return {
     describe() {
       return {
         protocolVersion: 1,
-        actions: Object.entries(actions).map(([name, action]) => ({
+        actions: Array.from(registry.values(), ({ name, definition }) => ({
           name,
-          version: action.version,
-          idempotent: action.idempotent,
+          version: definition.version,
+          idempotent: definition.idempotent,
         })),
       };
     },
@@ -78,26 +106,51 @@ export function createCronHandler<Env>(actions: Record<string, AnyAction<Env>>):
     async cron(input, runtime) {
       const request = cronRequestV1Schema.parse(input);
       if (jsonByteLength(request.payload) > LIMITS.payloadBytes) {
-        throw CronError.permanent("PAYLOAD_TOO_LARGE", "Payload exceeds 16 KiB");
+        return failure(
+          request,
+          "PAYLOAD_TOO_LARGE",
+          "Payload exceeds 16 KiB",
+          false,
+        );
       }
 
-      const action = actions[request.action];
-      if (!action || action.version !== request.actionVersion) {
-        return failure(request, "ACTION_NOT_SUPPORTED", "Action or version is not supported", false);
+      const action = registry.get(
+        actionKey(request.action, request.actionVersion),
+      )?.definition;
+      if (!action) {
+        return failure(
+          request,
+          "ACTION_NOT_SUPPORTED",
+          "Action or version is not supported",
+          false,
+        );
       }
 
       const payload = action.payloadSchema.safeParse(request.payload);
       if (!payload.success) {
-        return failure(request, "INVALID_PAYLOAD", "Payload does not match the action schema", false);
+        return failure(
+          request,
+          "INVALID_PAYLOAD",
+          "Payload does not match the action schema",
+          false,
+        );
       }
 
       const remainingMs = Date.parse(request.deadlineAt) - Date.now();
       if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
-        return failure(request, "DEADLINE_EXCEEDED", "Deadline elapsed before action started", true);
+        return failure(
+          request,
+          "DEADLINE_EXCEEDED",
+          "Deadline elapsed before action started",
+          true,
+        );
       }
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort("deadline exceeded"), remainingMs);
+      const timeout = setTimeout(
+        () => controller.abort("deadline exceeded"),
+        remainingMs,
+      );
       try {
         const value = await action.run(payload.data, {
           env: runtime.env,
@@ -106,10 +159,23 @@ export function createCronHandler<Env>(actions: Record<string, AnyAction<Env>>):
           signal: controller.signal,
         });
         if (stringByteLength(value.summary) > LIMITS.summaryBytes) {
-          return failure(request, "SUMMARY_TOO_LARGE", "Action summary exceeds 1 KiB", false);
+          return failure(
+            request,
+            "SUMMARY_TOO_LARGE",
+            "Action summary exceeds 1 KiB",
+            false,
+          );
         }
-        if (value.output !== undefined && jsonByteLength(value.output) > LIMITS.outputBytes) {
-          return failure(request, "OUTPUT_TOO_LARGE", "Action output exceeds 8 KiB", false);
+        if (
+          value.output !== undefined &&
+          jsonByteLength(value.output) > LIMITS.outputBytes
+        ) {
+          return failure(
+            request,
+            "OUTPUT_TOO_LARGE",
+            "Action output exceeds 8 KiB",
+            false,
+          );
         }
         return {
           protocolVersion: 1,
@@ -118,11 +184,18 @@ export function createCronHandler<Env>(actions: Record<string, AnyAction<Env>>):
           ok: true,
           summary: value.summary,
           ...(value.output === undefined ? {} : { output: value.output }),
-          ...(value.targetBuildId === undefined ? {} : { targetBuildId: value.targetBuildId }),
+          ...(value.targetBuildId === undefined
+            ? {}
+            : { targetBuildId: value.targetBuildId }),
         };
       } catch (error) {
         if (error instanceof CronError) {
-          return failure(request, error.code, boundedErrorMessage(error.message), error.retryable);
+          return failure(
+            request,
+            error.code,
+            boundedErrorMessage(error.message),
+            error.retryable,
+          );
         }
         console.error(
           JSON.stringify({
@@ -141,6 +214,10 @@ export function createCronHandler<Env>(actions: Record<string, AnyAction<Env>>):
   };
 }
 
+function actionKey(name: string, version: number): string {
+  return `${name}:${version}`;
+}
+
 function failure(
   request: CronRequestV1,
   code: string,
@@ -152,14 +229,27 @@ function failure(
     executionId: request.executionId,
     attemptId: request.attemptId,
     ok: false,
-    error: { code, message: boundedErrorMessage(message), retryable },
+    error: {
+      code: validErrorCode(code),
+      message: boundedErrorMessage(message),
+      retryable,
+    },
   };
+}
+
+function validErrorCode(code: string): string {
+  return code.length >= 1 && code.length <= 128
+    ? code
+    : "INVALID_CRON_ERROR_CODE";
 }
 
 function boundedErrorMessage(message: string): string {
   if (stringByteLength(message) <= LIMITS.errorMessageBytes) return message;
   let result = message;
-  while (result.length > 0 && stringByteLength(`${result}…`) > LIMITS.errorMessageBytes) {
+  while (
+    result.length > 0 &&
+    stringByteLength(`${result}…`) > LIMITS.errorMessageBytes
+  ) {
     result = result.slice(0, -1);
   }
   return `${result}…`;

@@ -1,4 +1,7 @@
-import { cronResultV1Schema, type CronRequestV1 } from "@unified-cron/contracts";
+import {
+  cronResultV1Schema,
+  type CronRequestV1,
+} from "@unified-cron/contracts";
 import { env, exports } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -8,24 +11,37 @@ describe("named CronEntrypoint contract", () => {
   });
 
   it("keeps the default fetch service while exposing named RPC", async () => {
-    const response = await exports.default.fetch(new Request("https://worker-data.example/"));
+    const response = await exports.default.fetch(
+      new Request("https://worker-data.example/"),
+    );
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ service: "worker-data", websitePreserved: true });
+    await expect(response.json()).resolves.toEqual({
+      service: "worker-data",
+      websitePreserved: true,
+    });
 
-    const description = await Promise.resolve(exports.CronEntrypoint.describe());
+    const description = await Promise.resolve(
+      exports.CronEntrypoint.describe(),
+    );
     expect(description).toMatchObject({ protocolVersion: 1 });
   });
 
   it("deduplicates business effects by Execution key and rewraps current Attempt identity", async () => {
     const first = cronResultV1Schema.parse(
-      await Promise.resolve(exports.CronEntrypoint.cron(request("attempt-1", 1))),
+      await Promise.resolve(
+        exports.CronEntrypoint.cron(request("attempt-1", 1)),
+      ),
     );
     const second = cronResultV1Schema.parse(
-      await Promise.resolve(exports.CronEntrypoint.cron(request("attempt-2", 2))),
+      await Promise.resolve(
+        exports.CronEntrypoint.cron(request("attempt-2", 2)),
+      ),
     );
     expect(first).toMatchObject({ ok: true, attemptId: "attempt-1" });
     expect(second).toMatchObject({ ok: true, attemptId: "attempt-2" });
-    const count = await env.BUSINESS_DB.prepare("SELECT COUNT(*) AS count FROM idempotent_results").first<{
+    const count = await env.BUSINESS_DB.prepare(
+      "SELECT COUNT(*) AS count FROM idempotent_results",
+    ).first<{
       count: number;
     }>();
     expect(count?.count).toBe(1);

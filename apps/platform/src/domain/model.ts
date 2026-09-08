@@ -41,7 +41,10 @@ export const ACTIVE_EXECUTION_STATUSES: readonly ExecutionStatus[] = [
   "unknown",
 ];
 
-export function retryDelayMs(policy: RetryPolicy, completedAttemptNumber: number): number | null {
+export function retryDelayMs(
+  policy: RetryPolicy,
+  completedAttemptNumber: number,
+): number | null {
   if (completedAttemptNumber >= policy.maxAttempts) return null;
   const seconds = policy.delaysSeconds[completedAttemptNumber - 1];
   return seconds === undefined ? null : seconds * 1000;

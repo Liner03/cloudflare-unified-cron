@@ -11,4 +11,5 @@ test-results/
 .env.*
 !.env.example
 *.tsbuildinfo
+*.cpuprofile
 .DS_Store

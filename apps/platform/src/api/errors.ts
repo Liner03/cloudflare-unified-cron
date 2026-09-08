@@ -14,9 +14,19 @@ export function errorResponse(error: unknown, requestId: string): Response {
   const apiError =
     error instanceof ApiError
       ? error
-      : new ApiError(503, "PLATFORM_UNAVAILABLE", "平台状态暂时不可用，请稍后重试");
+      : new ApiError(
+          503,
+          "PLATFORM_UNAVAILABLE",
+          "平台状态暂时不可用，请稍后重试",
+        );
   if (!(error instanceof ApiError)) {
-    console.error(JSON.stringify({ event: "api_unhandled_error", requestId, errorCode: "PLATFORM_UNAVAILABLE" }));
+    console.error(
+      JSON.stringify({
+        event: "api_unhandled_error",
+        requestId,
+        errorCode: "PLATFORM_UNAVAILABLE",
+      }),
+    );
   }
   return Response.json(
     {
@@ -24,7 +34,9 @@ export function errorResponse(error: unknown, requestId: string): Response {
         code: apiError.code,
         message: apiError.message,
         requestId,
-        ...(apiError.details === undefined ? {} : { details: apiError.details }),
+        ...(apiError.details === undefined
+          ? {}
+          : { details: apiError.details }),
       },
     },
     {

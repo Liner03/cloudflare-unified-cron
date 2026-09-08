@@ -33,7 +33,9 @@ export function ActionConfirm({
         <AlertDialogDescription>{description}</AlertDialogDescription>
         <AlertDialogActions>
           <AlertDialogCancel>返回</AlertDialogCancel>
-          <AlertDialogAction danger={danger} onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
+          <AlertDialogAction danger={danger} onClick={onConfirm}>
+            {confirmLabel}
+          </AlertDialogAction>
         </AlertDialogActions>
       </AlertDialogContent>
     </AlertDialog>
