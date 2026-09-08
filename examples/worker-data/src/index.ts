@@ -42,11 +42,11 @@ const cronHandler = createCronHandler<Env>({
 });
 
 export class CronEntrypoint extends CronEntrypointBase<Env> {
-  cron(input: unknown) {
+  cron(input: unknown): Promise<unknown> {
     return cronHandler.cron(input, { env: this.env, ctx: this.ctx });
   }
 
-  describe() {
+  describe(): Promise<unknown> {
     return Promise.resolve(cronHandler.describe());
   }
 }

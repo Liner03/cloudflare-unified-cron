@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - "examples/*"
+  - "tests/*"
 allowBuilds:
   esbuild: true
   workerd: true
@@ -21,3 +22,4 @@ minimumReleaseAgeExclude:
   - wrangler@4.129.1
   - '@cloudflare/workers-types@5.20260908.1'
   - '@cloudflare/vitest-plugin@1.1.5'
+  - lucide-react@1.42.0

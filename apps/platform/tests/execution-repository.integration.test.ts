@@ -166,4 +166,57 @@ describe("ExecutionRepository on D1", () => {
       .first<{ status: string }>();
     expect(execution?.status).toBe("unknown");
   });
+
+  it("cleans terminal history in bounded batches but never removes unknown", async () => {
+    const snapshot = JSON.stringify({
+      scheduleId: "schedule-1",
+      scheduleRevision: 1,
+      targetId: "DATA",
+      action: "healthCheck",
+      actionVersion: 1,
+      targetManifestRevision: "data-v1",
+      targetActionIdempotent: true,
+      payload: {},
+      retryPolicy: { maxAttempts: 1, delaysSeconds: [], retryOnUnknown: false },
+      timeoutMs: 30_000,
+      cronExpression: "* * * * *",
+      timezone: "UTC",
+    });
+    const old = now - 100 * 24 * 60 * 60 * 1000;
+    await env.DB.batch([
+      env.DB
+        .prepare(
+          `INSERT INTO executions (
+             id, schedule_id, target_id, source, scheduled_for, dedupe_key,
+             schedule_revision, snapshot_json, status, available_at, attempt_limit,
+             max_auto_attempts, retry_deadline_at, finished_at, created_at, updated_at
+           ) VALUES ('old-success', 'schedule-1', 'DATA', 'cron', ?, 'old-success',
+                     1, ?, 'succeeded', ?, 1, 1, ?, ?, ?, ?)`,
+        )
+        .bind(old, snapshot, old, old, old, old, old),
+      env.DB
+        .prepare(
+          `INSERT INTO executions (
+             id, schedule_id, target_id, source, scheduled_for, dedupe_key,
+             schedule_revision, snapshot_json, status, available_at, attempt_limit,
+             max_auto_attempts, retry_deadline_at, created_at, updated_at
+           ) VALUES ('old-unknown', 'schedule-1', 'DATA', 'cron', ?, 'old-unknown',
+                     1, ?, 'unknown', ?, 1, 1, ?, ?, ?)`,
+        )
+        .bind(old + 1, snapshot, old, old, old, old),
+      env.DB.prepare(
+        `INSERT INTO audit_events (id, actor, action, entity_type, entity_id, changes_json, created_at)
+         VALUES ('old-audit', 'system', 'old', 'system', '1', '{}', ?)`,
+      ).bind(old),
+      env.DB.prepare(
+        `INSERT INTO api_idempotency (scope, key, request_hash, status_code, response_json, created_at, expires_at)
+         VALUES ('scope', 'old-key', 'hash', 200, '{}', ?, ?)`,
+      ).bind(old, old),
+    ]);
+
+    const removed = await repository.cleanupHistory(now);
+    expect(removed).toEqual({ executions: 1, audit: 1, idempotency: 1 });
+    const remaining = await env.DB.prepare("SELECT id FROM executions ORDER BY id").all<{ id: string }>();
+    expect(remaining.results).toEqual([{ id: "old-unknown" }]);
+  });
 });

@@ -4,15 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --config wrangler.local.jsonc",
-    "build": "wrangler deploy --dry-run --outdir dist",
+    "dev": "wrangler dev --config wrangler.local.jsonc --port 8788 --inspector-port 9230",
+    "build": "wrangler deploy --config wrangler.local.jsonc --dry-run --outdir dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "types": "wrangler types --config wrangler.local.jsonc worker-configuration.d.ts"
+    "types": "wrangler types --config wrangler.local.jsonc worker-configuration.d.ts",
+    "db:migrate:local": "wrangler d1 migrations apply worker-data-local-db --local --config wrangler.local.jsonc",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@unified-cron/contracts": "workspace:*",
     "@unified-cron/worker-sdk": "workspace:*",
     "zod": "4.5.4"
   },
-  "devDependencies": { "wrangler": "4.129.1" }
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.5",
+    "vitest": "4.1.11",
+    "wrangler": "4.129.1"
+  }
 }

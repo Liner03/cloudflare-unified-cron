@@ -475,6 +475,44 @@ export class ExecutionRepository {
     return recovered;
   }
 
+  async cleanupHistory(nowMs: number): Promise<{ executions: number; audit: number; idempotency: number }> {
+    const successCutoff = nowMs - 14 * 24 * 60 * 60 * 1000;
+    const failureCutoff = nowMs - 30 * 24 * 60 * 60 * 1000;
+    const auditCutoff = nowMs - 90 * 24 * 60 * 60 * 1000;
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `DELETE FROM executions
+           WHERE id IN (
+             SELECT id FROM executions
+             WHERE (status IN ('succeeded', 'skipped', 'cancelled') AND finished_at < ?)
+                OR (status = 'failed' AND finished_at < ?)
+             ORDER BY finished_at, id LIMIT 50
+           )`,
+        )
+        .bind(successCutoff, failureCutoff),
+      this.db
+        .prepare(
+          `DELETE FROM audit_events WHERE id IN (
+             SELECT id FROM audit_events WHERE created_at < ? ORDER BY created_at, id LIMIT 50
+           )`,
+        )
+        .bind(auditCutoff),
+      this.db
+        .prepare(
+          `DELETE FROM api_idempotency WHERE (scope, key) IN (
+             SELECT scope, key FROM api_idempotency WHERE expires_at <= ? ORDER BY expires_at LIMIT 100
+           )`,
+        )
+        .bind(nowMs),
+    ]);
+    return {
+      executions: results[0]?.meta.changes ?? 0,
+      audit: results[1]?.meta.changes ?? 0,
+      idempotency: results[2]?.meta.changes ?? 0,
+    };
+  }
+
   private async disableInvalidSchedule(
     row: DueScheduleRow,
     nowMs: number,

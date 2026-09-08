@@ -74,6 +74,9 @@ export class TickApplication {
           else errors += 1;
         }
         if (errors > 0) outcome = "degraded";
+        if (this.clock.nowMs() - startedAt < TICK_SOFT_WALL_BUDGET_MS - FINALIZE_RESERVE_MS) {
+          await this.repository.cleanupHistory(this.clock.nowMs());
+        }
       }
     } catch (error) {
       errors += 1;

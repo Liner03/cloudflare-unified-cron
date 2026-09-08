@@ -24,7 +24,7 @@
     "AUTH_MODE": "local",
     "ACCESS_TEAM_DOMAIN": "https://local.cloudflareaccess.com",
     "ACCESS_AUD": "local",
-    "PUBLIC_ORIGIN": "http://localhost:8787",
+    "PUBLIC_ORIGIN": "http://127.0.0.1:5173",
     "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000001",
     "BUILD_VERSION": "local"
   },
