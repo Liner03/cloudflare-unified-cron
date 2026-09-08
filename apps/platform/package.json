@@ -1,0 +1,29 @@
+{
+  "name": "@unified-cron/platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.local.jsonc --test-scheduled",
+    "build": "wrangler deploy --config wrangler.local.jsonc --dry-run --outdir dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "types": "wrangler types --config wrangler.local.jsonc worker-configuration.d.ts",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:migrate:local": "wrangler d1 migrations apply unified-cron-platform-local-db --local --config wrangler.local.jsonc",
+    "seed:local": "wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file seed/local.sql"
+  },
+  "dependencies": {
+    "@unified-cron/contracts": "workspace:*",
+    "cron-parser": "5.10.0",
+    "hono": "4.13.7",
+    "jose": "6.2.12",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.5",
+    "@cloudflare/workers-types": "5.20260908.1",
+    "vitest": "4.1.11",
+    "wrangler": "4.129.1"
+  }
+}
