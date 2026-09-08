@@ -41,6 +41,9 @@ importers:
       '@unified-cron/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@unified-cron/worker-sdk':
+        specifier: workspace:*
+        version: link:../../packages/worker-sdk
       cron-parser:
         specifier: 5.10.0
         version: 5.10.0

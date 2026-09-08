@@ -1,5 +1,6 @@
-import { WorkerEntrypoint } from "cloudflare:workers";
 import { createCronHandler, defineAction } from "@unified-cron/worker-sdk";
+import { CronEntrypointBase } from "@unified-cron/worker-sdk/entrypoint";
+import { jsonValueSchema } from "@unified-cron/contracts";
 import { z } from "zod";
 
 const cronHandler = createCronHandler<Env>({
@@ -7,8 +8,8 @@ const cronHandler = createCronHandler<Env>({
     version: 1,
     idempotent: true,
     payloadSchema: z.object({}),
-    async run(_payload, context) {
-      return { summary: "Worker data is healthy", targetBuildId: context.env.BUILD_ID };
+    run(_payload, context) {
+      return Promise.resolve({ summary: "Worker data is healthy", targetBuildId: context.env.BUILD_ID });
     },
   }),
   syncUsers: defineAction({
@@ -33,20 +34,20 @@ const cronHandler = createCronHandler<Env>({
       if (!row) throw new Error("Idempotent result was not persisted");
       return {
         summary: "Users synchronized",
-        output: JSON.parse(row.result_json),
+        output: jsonValueSchema.parse(JSON.parse(row.result_json)),
         targetBuildId: context.env.BUILD_ID,
       };
     },
   }),
 });
 
-export class CronEntrypoint extends WorkerEntrypoint<Env> {
+export class CronEntrypoint extends CronEntrypointBase<Env> {
   cron(input: unknown) {
     return cronHandler.cron(input, { env: this.env, ctx: this.ctx });
   }
 
   describe() {
-    return cronHandler.describe();
+    return Promise.resolve(cronHandler.describe());
   }
 }
 

@@ -22,8 +22,8 @@ const baseRequest = {
 
 describe("worker sdk", () => {
   it("wraps successful actions with current attempt identity", async () => {
-    const run = vi.fn(async () => ({ summary: "synchronized", output: { count: 2 } }));
-    const handler = createCronHandler<{}>({
+    const run = vi.fn(() => Promise.resolve({ summary: "synchronized", output: { count: 2 } }));
+    const handler = createCronHandler<Record<string, never>>({
       sync: defineAction({
         version: 1,
         idempotent: true,
@@ -41,13 +41,13 @@ describe("worker sdk", () => {
   });
 
   it("turns explicit CronError into a declared failure", async () => {
-    const handler = createCronHandler<{}>({
+    const handler = createCronHandler<Record<string, never>>({
       sync: defineAction({
         version: 1,
         idempotent: true,
         payloadSchema: z.object({ source: z.string() }),
-        async run() {
-          throw CronError.retryable("UPSTREAM_503", "temporary failure");
+        run() {
+          return Promise.reject(CronError.retryable("UPSTREAM_503", "temporary failure"));
         },
       }),
     });
@@ -58,13 +58,13 @@ describe("worker sdk", () => {
   });
 
   it("rethrows unknown exceptions so the platform records unknown", async () => {
-    const handler = createCronHandler<{}>({
+    const handler = createCronHandler<Record<string, never>>({
       sync: defineAction({
         version: 1,
         idempotent: true,
         payloadSchema: z.object({ source: z.string() }),
-        async run() {
-          throw new Error("connection lost");
+        run() {
+          return Promise.reject(new Error("connection lost"));
         },
       }),
     });

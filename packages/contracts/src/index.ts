@@ -109,6 +109,17 @@ export interface CronTargetDescriptionV1 {
   }>;
 }
 
+export const cronTargetDescriptionV1Schema = z.object({
+  protocolVersion: z.literal(1),
+  actions: z.array(
+    z.object({
+      name: z.string().min(1).max(128),
+      version: z.number().int().min(1),
+      idempotent: z.boolean(),
+    }),
+  ),
+});
+
 export const LIMITS = {
   payloadBytes: 16 * 1024,
   summaryBytes: 1024,
