@@ -36,6 +36,7 @@ const scheduleRowSchema = z.object({
   operator_paused: z.number(),
   target_enabled: z.number(),
   dispatch_paused: z.number(),
+  effective_enabled: z.number(),
   retired_at: z.number().nullable(),
   created_at: z.number(),
   updated_at: z.number(),
@@ -55,6 +56,7 @@ const scheduleListRowSchema = z.object({
   operator_paused: z.number(),
   target_enabled: z.number(),
   dispatch_paused: z.number(),
+  effective_enabled: z.number(),
   registration_key: z.string(),
   revision: z.number(),
   next_run_at: z.number().nullable(),
@@ -97,23 +99,22 @@ export class ManagedScheduleRepository {
         `SELECT s.id, s.name, s.description, s.target_id, s.action,
                 s.action_version, s.cron_expression, s.timezone, s.enabled,
                 s.declared_enabled, s.operator_paused, s.registration_key,
-                t.enabled AS target_enabled,
-                p.dispatch_paused,
+                state.target_enabled, state.dispatch_paused,
+                state.effective_enabled,
                 s.revision, s.next_run_at,
                 (SELECT e.status FROM executions e WHERE e.schedule_id = s.id
                  ORDER BY e.created_at DESC, e.id DESC LIMIT 1) AS last_status,
                 (SELECT e.created_at FROM executions e WHERE e.schedule_id = s.id
                  ORDER BY e.created_at DESC, e.id DESC LIMIT 1) AS last_execution_at
          FROM schedules s
-         JOIN targets t ON t.id = s.target_id
-         JOIN platform_state p ON p.id = 1
-         WHERE s.managed_by_registration = 1 AND s.retired_at IS NULL
+         JOIN managed_schedule_effective_state state
+           ON state.schedule_id = s.id
+         WHERE true
            AND (? = '' OR s.name LIKE '%' || ? || '%' ESCAPE '\\')
            AND (? = '' OR s.target_id = ?)
            AND (
              ? = '' OR
-             (s.enabled = 1 AND t.enabled = 1 AND p.dispatch_paused = 0) =
-               CASE ? WHEN 'true' THEN 1 ELSE 0 END
+             state.effective_enabled = CASE ? WHEN 'true' THEN 1 ELSE 0 END
            )
          ORDER BY s.name, s.id
          LIMIT 50`,
@@ -241,11 +242,12 @@ export class ManagedScheduleRepository {
                 s.misfire_grace_seconds, s.next_run_at, s.registration_key,
                 s.managed_by_registration, s.declared_enabled,
                 s.operator_paused,
-                t.enabled AS target_enabled, p.dispatch_paused,
+                state.target_enabled, state.dispatch_paused,
+                state.effective_enabled,
                 s.retired_at, s.created_at, s.updated_at
          FROM schedules s
-         JOIN targets t ON t.id = s.target_id
-         JOIN platform_state p ON p.id = 1
+         JOIN managed_schedule_effective_state state
+           ON state.schedule_id = s.id
          WHERE s.id = ? LIMIT 1`,
       )
       .bind(id)
@@ -331,7 +333,7 @@ function serializeSchedule(row: ScheduleRow) {
     cronExpression: row.cron_expression,
     timezone: row.timezone,
     enabled: row.enabled === 1,
-    effectiveEnabled: blockingReasons.length === 0,
+    effectiveEnabled: row.effective_enabled === 1,
     blockingReasons,
     archivedAt: toIso(row.archived_at),
     revision: row.revision,
@@ -364,7 +366,7 @@ function serializeListRow(value: unknown) {
     cronExpression: row.cron_expression,
     timezone: row.timezone,
     enabled: row.enabled === 1,
-    effectiveEnabled: blockingReasons.length === 0,
+    effectiveEnabled: row.effective_enabled === 1,
     blockingReasons,
     declaredEnabled: row.declared_enabled === 1,
     operatorPaused: row.operator_paused === 1,
@@ -379,18 +381,30 @@ function serializeListRow(value: unknown) {
 
 type ScheduleStateRow = Pick<
   ScheduleRow,
-  "declared_enabled" | "operator_paused" | "target_enabled" | "dispatch_paused"
+  | "enabled"
+  | "declared_enabled"
+  | "operator_paused"
+  | "target_enabled"
+  | "dispatch_paused"
 >;
 
 function scheduleBlockingReasons(row: ScheduleStateRow) {
   const reasons: Array<
     | "declared_disabled"
     | "operator_paused"
+    | "invalid_configuration"
     | "target_disabled"
     | "dispatch_paused"
   > = [];
   if (row.declared_enabled !== 1) reasons.push("declared_disabled");
   if (row.operator_paused === 1) reasons.push("operator_paused");
+  if (
+    row.enabled !== 1 &&
+    row.declared_enabled === 1 &&
+    row.operator_paused !== 1
+  ) {
+    reasons.push("invalid_configuration");
+  }
   if (row.target_enabled !== 1) reasons.push("target_disabled");
   if (row.dispatch_paused === 1) reasons.push("dispatch_paused");
   return reasons;

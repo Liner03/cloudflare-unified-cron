@@ -20,6 +20,7 @@ export type ExecutionSummary = z.infer<typeof executionSummarySchema>;
 export const scheduleBlockingReasonSchema = z.enum([
   "declared_disabled",
   "operator_paused",
+  "invalid_configuration",
   "target_disabled",
   "dispatch_paused",
 ]);

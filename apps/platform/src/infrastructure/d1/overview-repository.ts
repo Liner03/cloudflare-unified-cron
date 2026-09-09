@@ -10,18 +10,9 @@ export class OverviewRepository {
     const [batch, successRates] = await Promise.all([
       this.db.batch([
         this.db.prepare(
-          `SELECT
-             SUM(CASE WHEN s.enabled = 1 AND t.enabled = 1
-                       AND p.dispatch_paused = 0
-                       AND s.managed_by_registration = 1
-                       AND s.retired_at IS NULL THEN 1 ELSE 0 END)
-               AS active_schedules,
-             SUM(CASE WHEN s.managed_by_registration = 1
-                       AND s.retired_at IS NULL THEN 1 ELSE 0 END)
-               AS total_schedules
-           FROM schedules s
-           JOIN targets t ON t.id = s.target_id
-           JOIN platform_state p ON p.id = 1`,
+          `SELECT COALESCE(SUM(effective_enabled), 0) AS active_schedules,
+                  COUNT(*) AS total_schedules
+           FROM managed_schedule_effective_state`,
         ),
         this.db.prepare(
           `SELECT id, schedule_id, target_id, source, status, reason_code,

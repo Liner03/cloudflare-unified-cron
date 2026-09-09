@@ -40,7 +40,7 @@ Content-Type: application/json
 }
 ```
 
-The target identity is derived from the token, never accepted from the body. Repeating the same revision and body is a no-op. Reusing a revision with a different body is a conflict. The application validates the whole document before applying it atomically.
+The target identity is derived from the token, never accepted from the body. Repeating the same revision and body is a no-op. Reusing a revision with a different body is a conflict. Before hashing, object keys are canonicalized recursively and the Action/Schedule desired-state collections are ordered by their identities, so JSON serialization order is not treated as a configuration change. Payload array order remains significant. The application validates the whole document before applying it atomically.
 
 Revision/hash bindings are retained permanently for the Target, not only for the current Registration. Republishing an exact historical declaration is a supported rollback; reusing its revision for different content is always rejected.
 
@@ -56,7 +56,7 @@ AND NOT platform dispatch-paused
 = eligible for materialization and dispatch
 ```
 
-Schedule 列表与详情同时返回 `effectiveEnabled` 和 `blockingReasons`；后者会明确列出 `declared_disabled`、`operator_paused`、`target_disabled` 与 `dispatch_paused` 中所有当前原因。Overview 的 active 计数使用同一套有效状态语义。
+Schedule 列表与详情同时返回 `effectiveEnabled` 和 `blockingReasons`；后者会明确列出 `declared_disabled`、`operator_paused`、`invalid_configuration`、`target_disabled` 与 `dispatch_paused` 中所有当前原因。`invalid_configuration` 表示 Worker 声明为启用，但平台因当前 Action 配置已失效而将其安全停用。列表筛选、详情和 Overview active 计数全部读取同一个 D1 有效状态投影。
 
 No Registration write may modify `operator_paused`, target disablement, the global pause, an Execution, or an Attempt.
 

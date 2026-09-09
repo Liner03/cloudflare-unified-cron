@@ -123,6 +123,71 @@ describe("registered control plane API", () => {
     });
   });
 
+  it("treats nested JSON key order as the same Registration document", async () => {
+    const token = await issuedToken();
+    const first = await register(token, {
+      ...baseRegistration,
+      registrationRevision: "canonical-document",
+      schedules: [
+        {
+          ...baseRegistration.schedules[0],
+          payload: { alpha: 1, nested: { first: true, second: false } },
+        },
+      ],
+    });
+    expect(first.status).toBe(200);
+
+    const replay = await register(token, {
+      ...baseRegistration,
+      registrationRevision: "canonical-document",
+      schedules: [
+        {
+          ...baseRegistration.schedules[0],
+          payload: { nested: { second: false, first: true }, alpha: 1 },
+        },
+      ],
+    });
+    expect(replay.status).toBe(200);
+    await expect(replay.json()).resolves.toMatchObject({
+      data: { unchanged: true },
+    });
+  });
+
+  it("preserves Schedule timing and revision for canonically equal config", async () => {
+    const token = await issuedToken();
+    await register(token, {
+      ...baseRegistration,
+      registrationRevision: "canonical-config-1",
+      schedules: [
+        {
+          ...baseRegistration.schedules[0],
+          payload: { alpha: 1, nested: { first: true, second: false } },
+        },
+      ],
+    });
+    const before = await env.DB.prepare(
+      `SELECT revision, next_run_at FROM schedules
+       WHERE target_id = 'DATA' AND registration_key = 'health-check'`,
+    ).first();
+
+    const updated = await register(token, {
+      ...baseRegistration,
+      registrationRevision: "canonical-config-2",
+      schedules: [
+        {
+          ...baseRegistration.schedules[0],
+          payload: { nested: { second: false, first: true }, alpha: 1 },
+        },
+      ],
+    });
+    expect(updated.status).toBe(200);
+    const after = await env.DB.prepare(
+      `SELECT revision, next_run_at FROM schedules
+       WHERE target_id = 'DATA' AND registration_key = 'health-check'`,
+    ).first();
+    expect(after).toEqual(before);
+  });
+
   it("never accepts different content for a previously seen revision", async () => {
     const token = await issuedToken();
     await register(token, baseRegistration);
@@ -318,6 +383,40 @@ describe("registered control plane API", () => {
           "target_disabled",
           "dispatch_paused",
         ],
+      },
+    });
+    const overview = await adminGet("/api/v1/overview");
+    await expect(overview.json()).resolves.toMatchObject({
+      data: { schedules: { active_schedules: 0, total_schedules: 1 } },
+    });
+  });
+
+  it("reports a system-disabled invalid Schedule as blocked everywhere", async () => {
+    const token = await issuedToken();
+    await register(token, baseRegistration);
+    await env.DB.prepare(
+      `UPDATE schedules SET enabled = 0, next_run_at = NULL
+       WHERE target_id = 'DATA' AND registration_key = 'health-check'`,
+    ).run();
+
+    const list = await adminGet("/api/v1/schedules");
+    const listBody: {
+      data: Array<{
+        id: string;
+        effectiveEnabled: boolean;
+        blockingReasons: string[];
+      }>;
+    } = await list.json();
+    expect(listBody.data[0]).toMatchObject({
+      effectiveEnabled: false,
+      blockingReasons: ["invalid_configuration"],
+    });
+
+    const detail = await adminGet(`/api/v1/schedules/${listBody.data[0]!.id}`);
+    await expect(detail.json()).resolves.toMatchObject({
+      data: {
+        effectiveEnabled: false,
+        blockingReasons: ["invalid_configuration"],
       },
     });
     const overview = await adminGet("/api/v1/overview");

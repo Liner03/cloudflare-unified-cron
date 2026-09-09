@@ -26,6 +26,7 @@ export function shortId(value: string): string {
 const scheduleBlockingLabels = {
   declared_disabled: "Worker 声明停用",
   operator_paused: "管理员暂停",
+  invalid_configuration: "配置无效，系统已停用",
   target_disabled: "Target 已停用",
   dispatch_paused: "全局派发暂停",
 } as const;

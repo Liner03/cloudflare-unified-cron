@@ -5,6 +5,10 @@ import {
 } from "@unified-cron/contracts";
 import { z } from "zod";
 import { DomainError } from "../../domain/error";
+import {
+  canonicalRegistrationDocument,
+  canonicalScheduleConfiguration,
+} from "../../domain/registration-canonical";
 import { getTargetManifest } from "../../targets.manifest";
 import { CronCalculator } from "../cron/cron-calculator";
 import { sha256Hex } from "../security/crypto";
@@ -71,7 +75,9 @@ export class RegistrationRepository {
       );
     }
 
-    const documentHash = await sha256Hex(JSON.stringify(declaration));
+    const documentHash = await sha256Hex(
+      canonicalRegistrationDocument(declaration),
+    );
     const now = Date.now();
     const [currentValue, historicalValue, otherScheduleCountValue] =
       await Promise.all([
@@ -162,7 +168,7 @@ export class RegistrationRepository {
                 now,
               )
             : null,
-          configHash: await sha256Hex(JSON.stringify(schedule)),
+          configHash: await sha256Hex(canonicalScheduleConfiguration(schedule)),
         };
       }),
     );
