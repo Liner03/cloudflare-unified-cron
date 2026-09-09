@@ -1,3 +1,4 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -7,8 +8,10 @@ import {
   RotateCw,
   ShieldAlert,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { ActionConfirm } from "@/components/shared/action-confirm";
 import {
   EmptyState,
@@ -52,14 +55,26 @@ interface RevealedToken {
   rotatedFromId?: string | undefined;
 }
 
+const issueTokenFormSchema = z.object({
+  targetId: z.string().min(1, "请选择 Target").max(128),
+  label: z
+    .string()
+    .trim()
+    .min(1, "请输入用途标签")
+    .max(100, "标签不能超过 100 个字符"),
+  expiresInDays: z.enum(["30", "90", "180", "365"]),
+});
+type IssueTokenFormValues = z.infer<typeof issueTokenFormSchema>;
+
 export function RegistrationsPage() {
   const queryClient = useQueryClient();
   const [issueOpen, setIssueOpen] = useState(false);
-  const [targetId, setTargetId] = useState("");
-  const [label, setLabel] = useState("");
-  const [expiresInDays, setExpiresInDays] = useState("90");
   const [revealed, setRevealed] = useState<RevealedToken | null>(null);
   const [copied, setCopied] = useState(false);
+  const issueForm = useForm<IssueTokenFormValues>({
+    resolver: zodResolver(issueTokenFormSchema),
+    defaultValues: { targetId: "", label: "", expiresInDays: "90" },
+  });
   const tokens = useQuery({
     queryKey: ["registration-tokens"],
     queryFn: ({ signal }) =>
@@ -70,19 +85,19 @@ export function RegistrationsPage() {
     queryFn: ({ signal }) => apiGet("/api/v1/targets", targetsSchema, signal),
   });
   const issue = useMutation({
-    mutationFn: () =>
+    mutationFn: (values: IssueTokenFormValues) =>
       apiMutate(
         "/api/v1/registration-tokens",
         {
-          targetId: targetId || targets.data?.data[0]?.id || "",
-          label,
-          expiresInDays: Number(expiresInDays),
+          targetId: values.targetId,
+          label: values.label,
+          expiresInDays: Number(values.expiresInDays),
         },
         issuedRegistrationTokenSchema,
       ),
     onSuccess: async ({ data }) => {
       setIssueOpen(false);
-      setLabel("");
+      issueForm.reset({ targetId: "", label: "", expiresInDays: "90" });
       setRevealed(data);
       setCopied(false);
       await queryClient.invalidateQueries({
@@ -123,10 +138,7 @@ export function RegistrationsPage() {
     onError: (error) =>
       toast.error("无法轮换 Token", { description: errorMessage(error) }),
   });
-  const submitIssue = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!issue.isPending) issue.mutate();
-  };
+  const submitIssue = issueForm.handleSubmit((values) => issue.mutate(values));
   const copy = async () => {
     if (!revealed) return;
     try {
@@ -140,14 +152,26 @@ export function RegistrationsPage() {
   const isLoading = tokens.isLoading || targets.isLoading;
   const hasError = tokens.isError || targets.isError;
   const targetValues = targets.data?.data ?? [];
-  const activeTargetId = targetId || targetValues[0]?.id || "";
   const now = Date.now();
 
   return (
     <>
       <PageHeader
         action={
-          <Dialog onOpenChange={setIssueOpen} open={issueOpen}>
+          <Dialog
+            onOpenChange={(open) => {
+              setIssueOpen(open);
+              if (open) {
+                issue.reset();
+                issueForm.reset({
+                  targetId: targetValues[0]?.id ?? "",
+                  label: "",
+                  expiresInDays: "90",
+                });
+              }
+            }}
+            open={issueOpen}
+          >
             <DialogTrigger asChild>
               <Button disabled={targetValues.length === 0}>
                 <Plus size={16} /> 签发 Token
@@ -159,14 +183,23 @@ export function RegistrationsPage() {
                 Token 只允许一个预授权 Target 发布完整
                 Registration，不能访问管理员接口。
               </DialogDescription>
-              <form className="mt-5 grid gap-4" onSubmit={submitIssue}>
+              <form
+                className="mt-5 grid gap-4"
+                noValidate
+                onSubmit={(event) => void submitIssue(event)}
+              >
                 <div className="grid gap-2">
                   <Label htmlFor="token-target">Target</Label>
                   <Select
+                    aria-describedby={
+                      issueForm.formState.errors.targetId
+                        ? "token-target-error"
+                        : undefined
+                    }
+                    aria-invalid={Boolean(issueForm.formState.errors.targetId)}
+                    aria-required="true"
                     id="token-target"
-                    onChange={(event) => setTargetId(event.target.value)}
-                    required
-                    value={activeTargetId}
+                    {...issueForm.register("targetId")}
                   >
                     {targetValues.map((target) => (
                       <option key={target.id} value={target.id}>
@@ -174,24 +207,47 @@ export function RegistrationsPage() {
                       </option>
                     ))}
                   </Select>
+                  {issueForm.formState.errors.targetId ? (
+                    <p
+                      className="text-sm text-destructive"
+                      id="token-target-error"
+                      role="alert"
+                    >
+                      {issueForm.formState.errors.targetId.message}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="token-label">用途标签</Label>
                   <Input
+                    aria-describedby={
+                      issueForm.formState.errors.label
+                        ? "token-label-error"
+                        : undefined
+                    }
+                    aria-invalid={Boolean(issueForm.formState.errors.label)}
+                    aria-required="true"
                     id="token-label"
                     maxLength={100}
-                    onChange={(event) => setLabel(event.target.value)}
                     placeholder="例如：production deployment"
-                    required
-                    value={label}
+                    {...issueForm.register("label")}
                   />
+                  {issueForm.formState.errors.label ? (
+                    <p
+                      className="text-sm text-destructive"
+                      id="token-label-error"
+                      role="alert"
+                    >
+                      {issueForm.formState.errors.label.message}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="token-expiry">有效期</Label>
                   <Select
+                    aria-required="true"
                     id="token-expiry"
-                    onChange={(event) => setExpiresInDays(event.target.value)}
-                    value={expiresInDays}
+                    {...issueForm.register("expiresInDays")}
                   >
                     <option value="30">30 天</option>
                     <option value="90">90 天</option>
@@ -210,7 +266,7 @@ export function RegistrationsPage() {
                       取消
                     </Button>
                   </DialogClose>
-                  <Button disabled={issue.isPending || activeTargetId === ""}>
+                  <Button disabled={issue.isPending}>
                     <KeyRound size={15} />
                     {issue.isPending ? "正在签发" : "签发一次性 Token"}
                   </Button>

@@ -1,9 +1,9 @@
 import type { MiddlewareHandler } from "hono";
 import { ApiError } from "../../api/errors";
+import { ADMIN_SESSION_TTL_MS } from "../../domain/auth";
 import { AdminSessionRepository } from "../d1/admin-session-repository";
 import { timingSafeEqual } from "../security/crypto";
 
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MIN_PBKDF2_ITERATIONS = 600_000;
 
 export interface ApiVariables {
@@ -90,7 +90,7 @@ export async function createAdminSession(
     cookie: serializeSessionCookie(
       env,
       token,
-      Math.floor(SESSION_TTL_MS / 1000),
+      Math.floor(ADMIN_SESSION_TTL_MS / 1000),
     ),
     expiresAt,
   };

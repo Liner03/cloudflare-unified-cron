@@ -189,6 +189,26 @@ describe("registered control plane API", () => {
     expect(response.status).toBe(200);
     expect(await count("registered_actions")).toBe(100);
     expect(await count("schedules")).toBe(50);
+
+    const updated = await register(token, {
+      protocolVersion: 1,
+      registrationRevision: "maximum-declaration-updated",
+      worker: { label: "Large Worker" },
+      actions,
+      schedules: schedules.map((schedule, index) =>
+        index === 0 ? { ...schedule, name: "Updated at capacity" } : schedule,
+      ),
+    });
+    expect(updated.status).toBe(200);
+    const updatedSchedule = await env.DB.prepare(
+      `SELECT name, revision FROM schedules
+       WHERE target_id = 'DATA' AND registration_key = 'schedule-0'`,
+    ).first();
+    expect(updatedSchedule).toMatchObject({
+      name: "Updated at capacity",
+      revision: 2,
+    });
+    expect(await count("schedules")).toBe(50);
   });
 
   it("enforces the 50 Schedule limit across all targets", async () => {
@@ -199,7 +219,7 @@ describe("registered control plane API", () => {
     ).run();
     await env.DB.prepare(
       `WITH RECURSIVE numbers(value) AS (
-         SELECT 1 UNION ALL SELECT value + 1 FROM numbers WHERE value < 50
+         SELECT 1 UNION ALL SELECT value + 1 FROM numbers WHERE value < 49
        )
        INSERT INTO schedules (
          id, name, description, target_id, action, action_version,
@@ -214,6 +234,10 @@ describe("registered control plane API", () => {
               30000, 'coalesce', 300, NULL, 1, 1, 'other-' || value, 1, 0, 0
        FROM numbers`,
     ).run();
+    const token = await issuedToken();
+    expect((await register(token, baseRegistration)).status).toBe(200);
+    expect(await activeScheduleCount()).toBe(50);
+
     await expect(
       env.DB.prepare(
         `INSERT INTO schedules (
@@ -230,13 +254,76 @@ describe("registered control plane API", () => {
          )`,
       ).run(),
     ).rejects.toThrow(/MANAGED_SCHEDULE_LIMIT_REACHED/);
-    const token = await issuedToken();
-    const response = await register(token, baseRegistration);
+    const response = await register(token, {
+      ...baseRegistration,
+      registrationRevision: "build-over-capacity",
+      schedules: [
+        ...baseRegistration.schedules,
+        {
+          ...baseRegistration.schedules[0],
+          key: "second-schedule",
+          name: "Second schedule",
+        },
+      ],
+    });
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "SCHEDULE_LIMIT_REACHED" },
     });
-    expect(await count("schedules")).toBe(50);
+    expect(await activeScheduleCount()).toBe(50);
+  });
+
+  it("reports every effective Schedule blocker in list, detail, and overview", async () => {
+    const token = await issuedToken();
+    await register(token, {
+      ...baseRegistration,
+      schedules: [{ ...baseRegistration.schedules[0], enabled: false }],
+    });
+    await env.DB.batch([
+      env.DB.prepare("UPDATE targets SET enabled = 0 WHERE id = 'DATA'"),
+      env.DB.prepare(
+        "UPDATE schedules SET operator_paused = 1 WHERE target_id = 'DATA'",
+      ),
+      env.DB.prepare(
+        "UPDATE platform_state SET dispatch_paused = 1 WHERE id = 1",
+      ),
+    ]);
+
+    const list = await adminGet("/api/v1/schedules");
+    expect(list.status).toBe(200);
+    const listBody: {
+      data: Array<{
+        id: string;
+        effectiveEnabled: boolean;
+        blockingReasons: string[];
+      }>;
+    } = await list.json();
+    expect(listBody.data[0]).toMatchObject({
+      effectiveEnabled: false,
+      blockingReasons: [
+        "declared_disabled",
+        "operator_paused",
+        "target_disabled",
+        "dispatch_paused",
+      ],
+    });
+
+    const detail = await adminGet(`/api/v1/schedules/${listBody.data[0]!.id}`);
+    await expect(detail.json()).resolves.toMatchObject({
+      data: {
+        effectiveEnabled: false,
+        blockingReasons: [
+          "declared_disabled",
+          "operator_paused",
+          "target_disabled",
+          "dispatch_paused",
+        ],
+      },
+    });
+    const overview = await adminGet("/api/v1/overview");
+    await expect(overview.json()).resolves.toMatchObject({
+      data: { schedules: { active_schedules: 0, total_schedules: 1 } },
+    });
   });
 
   it("retires omitted schedules and never clears an Operator Override", async () => {
@@ -567,5 +654,13 @@ async function count(table: "schedules" | "registered_actions" | "attempts") {
   ).first<{
     count: number;
   }>();
+  return row?.count ?? 0;
+}
+
+async function activeScheduleCount() {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS count FROM schedules
+     WHERE managed_by_registration = 1 AND retired_at IS NULL`,
+  ).first<{ count: number }>();
   return row?.count ?? 0;
 }

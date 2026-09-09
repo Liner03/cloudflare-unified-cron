@@ -12,22 +12,22 @@ CI=true pnpm verify
 
 ## 自动化测试
 
-| 层级                            |      结果 | 关键范围                                                                                                |
-| ------------------------------- | --------: | ------------------------------------------------------------------------------------------------------- |
-| Contracts unit                  |  7 passed | RPC identity、retry schema、完整 Registration、unsafe retry 与共享 bounded JSON reader                  |
-| Worker SDK unit                 | 10 passed | Cron envelope、多版本、独立 Registration client、响应大小/JSON 错误与 credential header                 |
-| Platform unit                   | 29 passed | Cron/DST、retry policy、Target check application、D1/HTTP seam 架构守卫、Node 版本                      |
-| Platform workerd/D1 integration | 34 passed | 本地认证、revision 历史、全局容量 trigger、Token rotation、reconcile/覆盖、幂等、物化/claim/lease/Retry |
-| Example Worker RPC integration  |  2 passed | default fetch 保留、命名 Entrypoint、业务 D1 幂等、Attempt 身份重包装                                   |
-| Playwright E2E                  | 15 passed | 1440/768/390px、本地登录、Token 签发/轮换一次性展示、注册状态、Operator Override、移动导航              |
+| 层级                            |      结果 | 关键范围                                                                                             |
+| ------------------------------- | --------: | ---------------------------------------------------------------------------------------------------- |
+| Contracts unit                  |  7 passed | RPC identity、retry schema、完整 Registration、unsafe retry 与共享 bounded JSON reader               |
+| Worker SDK unit                 | 10 passed | Cron envelope、多版本、独立 Registration client、响应大小/JSON 错误与 credential header              |
+| Platform unit                   | 30 passed | Cron/DST、retry policy、成功 output 持久化、Target check、D1/HTTP seam 架构守卫、Node 版本           |
+| Platform workerd/D1 integration | 36 passed | 本地认证、revision 历史、容量 UPSERT/trigger、有效状态、Token rotation、reconcile、claim/lease/Retry |
+| Example Worker RPC integration  |  2 passed | default fetch 保留、命名 Entrypoint、业务 D1 幂等、Attempt 身份重包装                                |
+| Playwright E2E                  | 15 passed | 1440/768/390px、本地登录、Token 签发/轮换一次性展示、注册状态、Operator Override、移动导航           |
 
-自动化测试合计 97 项通过。
+自动化测试合计 100 项通过。
 
 核心 domain + CronCalculator V8 覆盖率：
 
 | Statements | Branches | Functions |  Lines |
 | ---------: | -------: | --------: | -----: |
-|     96.82% |   92.30% |      100% | 98.21% |
+|     95.31% |   92.30% |      100% | 96.49% |
 
 ## D1 与一致性证据
 
@@ -41,15 +41,17 @@ CI=true pnpm verify
 - 过期 lease 在 `retryOnUnknown=false` 时保守进入 unknown。
 - 三次自动尝试按 60/300 秒最早时间领取，第三次耗尽后停止。
 - 所有 skipped 在物化时写入 `finished_at`；清理也兼容早期缺失该字段的 skipped 记录，并始终保留 unknown。
-- 使用 `json_each(?)` 在固定少量 statements 中原子写入 100 个 Action 与 50 个 Schedule。
+- 使用 `json_each(?)` 在固定少量 statements 中原子写入 100 个 Action 与 50 个 Schedule；容量已满时更新现有 key 仍成功并正确推进 revision。
 - 相同 Registration revision 与内容是 no-op；相同 revision 不同内容冲突。
 - 历史 revision/hash 永久保留；完全相同的历史声明可回滚，换内容复用旧 revision 被拒绝。
 - 缺失 Schedule 软退役；重新加入相同 key 时沿用逻辑身份且保留 Operator Override。
 - Registration Token 只存 SHA-256 hash，撤销后立即拒绝机器注册而不影响 Admin Session。
 - Token rotation 原子撤销旧值并签发替换值；并发轮换只有一个成功。
-- 全平台第 51 个未退役 Managed Schedule 同时受应用预检和 D1 trigger 拒绝。
+- 49 个其他 Target Schedule 加 1 个注册 Schedule 可达到全局上限；第 51 个同时受应用预检、reconcile guard 和 D1 trigger 拒绝。
 - Schedule Operator Override 会阻止既有 intent 的领取，Schedule 不提供 Run now。
 - Retry 同时要求快照与当前同版本 Action 声明幂等。
+- 已排队 Retry 若在领取前失去当前幂等声明，会以 `RETRY_IDEMPOTENCY_REVOKED` 终止且不进入 RPC；成功响应的 bounded `output` 会与 summary 一同持久化。
+- Schedule list/detail 返回声明、管理员、Target 与全局派发的完整 blocker；Overview active 计数使用相同有效状态。
 - `EXPLAIN QUERY PLAN` 使用 `idx_schedules_due` 与 `idx_execution_recent`。
 
 ## 本地真实闭环
@@ -65,8 +67,8 @@ env.CRON_DATA (worker-data-local#CronEntrypoint) Worker local [connected]
 ## 构建与路由
 
 - 示例 Worker dry-run：755.82 KiB，gzip 116.76 KiB。
-- 平台 Worker + 23 个 Static Assets dry-run：1310.50 KiB，gzip 226.90 KiB。
-- Vite 主入口：497.05 KiB，gzip 152.34 KiB；页面按 route code-split。
+- 平台 Worker + 23 个 Static Assets dry-run：1312.37 KiB，gzip 227.23 KiB。
+- Vite 主入口：530.36 KiB，gzip 163.94 KiB；页面按 route code-split。
 - `wrangler check startup` 本地 profile：27.3 ms window，12.6 ms active（含 2.5 ms GC）。该值只用于定位本机启动开销，不代表 Cloudflare CPU。
 - Static Assets 根路径返回 HTML 200，并带 CSP、X-Frame-Options、nosniff、Referrer 与 Permissions Policy。
 - `/api/v1/not-a-route` 返回 JSON 404 和 `Cache-Control: no-store`。

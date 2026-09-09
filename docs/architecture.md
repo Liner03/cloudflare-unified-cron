@@ -32,8 +32,9 @@
 11. Registration 是完整期望状态：缺失 Schedule 软退役，Action 与 Schedule 批量原子替换。
 12. `operator_paused` 独立于 `declared_enabled`；任何 Registration 都不能清除 Operator Override。
 13. `(target_id, registration_revision)` 永久绑定首次声明 hash；旧 revision 可以原样回滚，不能绑定另一份内容。
-14. 所有未退役 Managed Schedule 在整个平台合计不超过 50；D1 trigger 是并发下的最终约束。
+14. 所有未退役 Managed Schedule 在整个平台合计不超过 50；D1 `AFTER INSERT` / reactivation trigger 与 reconcile 末尾 guard 是并发下的最终约束，且不会误拒绝容量上限处的 UPSERT。
 15. Schedule 没有 Run now；Operator Override 会同时阻止新物化与既有 intent 的派发。
+16. Retry 在每次 RPC 前重新验证快照与当前 Action 的幂等声明；幂等性被撤销时安全终止，不调用业务 Worker。
 
 ## Tick 顺序与预算
 
@@ -51,6 +52,7 @@
 最坏常规路径保守低于 40 条 D1 statements；开始新 RPC 前为 finalize 保留 2 秒软件预算。45 秒是应用软 wall budget，不是 Cloudflare 平台保证。
 
 Registration 使用 `json_each(?)` 批量写入最多 100 个 Action 与 50 个 Schedule，整个 reconcile 固定为少量 statements，不随声明条目数线性增加 D1 子请求。
+Schedule 声明保存规范化配置 hash；revision 与 `next_run_at` 的更新只比较该 hash 和退役状态，不在多个 SQL 分支复制字段相等逻辑。
 
 ## 状态真实性
 

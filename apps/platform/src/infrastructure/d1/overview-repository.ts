@@ -11,13 +11,17 @@ export class OverviewRepository {
       this.db.batch([
         this.db.prepare(
           `SELECT
-             SUM(CASE WHEN enabled = 1 AND managed_by_registration = 1
-                       AND retired_at IS NULL THEN 1 ELSE 0 END)
+             SUM(CASE WHEN s.enabled = 1 AND t.enabled = 1
+                       AND p.dispatch_paused = 0
+                       AND s.managed_by_registration = 1
+                       AND s.retired_at IS NULL THEN 1 ELSE 0 END)
                AS active_schedules,
-             SUM(CASE WHEN managed_by_registration = 1
-                       AND retired_at IS NULL THEN 1 ELSE 0 END)
+             SUM(CASE WHEN s.managed_by_registration = 1
+                       AND s.retired_at IS NULL THEN 1 ELSE 0 END)
                AS total_schedules
-           FROM schedules`,
+           FROM schedules s
+           JOIN targets t ON t.id = s.target_id
+           JOIN platform_state p ON p.id = 1`,
         ),
         this.db.prepare(
           `SELECT id, schedule_id, target_id, source, status, reason_code,

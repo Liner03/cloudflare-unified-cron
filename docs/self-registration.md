@@ -56,6 +56,8 @@ AND NOT platform dispatch-paused
 = eligible for materialization and dispatch
 ```
 
+Schedule 列表与详情同时返回 `effectiveEnabled` 和 `blockingReasons`；后者会明确列出 `declared_disabled`、`operator_paused`、`target_disabled` 与 `dispatch_paused` 中所有当前原因。Overview 的 active 计数使用同一套有效状态语义。
+
 No Registration write may modify `operator_paused`, target disablement, the global pause, an Execution, or an Attempt.
 
 The platform has no Schedule Run-now operation. Retry keeps the same Execution and idempotency key; Run Again starts from a completed Execution with an explicit duplicate-side-effect warning. A paused, retired, or Worker-declared-disabled Schedule is not dispatch-eligible for queued or newly requested operator work.

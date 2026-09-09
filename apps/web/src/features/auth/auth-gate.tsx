@@ -1,19 +1,20 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, LoaderCircle, RadioTower } from "lucide-react";
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/form-controls";
 import { apiGet, apiMutate, errorMessage } from "@/lib/api-client";
 import { authSessionSchema } from "@/lib/api-schemas";
 
 const SESSION_QUERY_KEY = ["auth", "session"] as const;
+const loginFormSchema = z.object({
+  username: z.string().trim().min(1, "请输入用户名").max(128),
+  password: z.string().min(1, "请输入密码").max(1024),
+});
+type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 interface AuthContextValue {
   username: string;
@@ -95,21 +96,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
 }
 
 function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: { username: "", password: "" },
+  });
   const login = useMutation({
-    mutationFn: () =>
-      apiMutate(
-        "/api/v1/auth/login",
-        { username, password },
-        authSessionSchema,
-      ),
+    mutationFn: (values: LoginFormValues) =>
+      apiMutate("/api/v1/auth/login", values, authSessionSchema),
     onSuccess: onAuthenticated,
   });
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!login.isPending) login.mutate();
-  };
+  const submit = form.handleSubmit((values) => login.mutate(values));
   return (
     <main className="login-page">
       <section className="login-signal" aria-hidden="true">
@@ -135,30 +131,62 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
             <h2 id="login-title">管理员登录</h2>
             <p>使用部署时配置的本地管理员凭据。</p>
           </div>
-          <form className="login-form" onSubmit={submit}>
+          <form
+            className="login-form"
+            noValidate
+            onSubmit={(event) => void submit(event)}
+          >
             <div className="grid gap-2">
               <Label htmlFor="admin-username">用户名</Label>
               <Input
                 autoComplete="username"
                 autoFocus
+                aria-describedby={
+                  form.formState.errors.username
+                    ? "admin-username-error"
+                    : undefined
+                }
+                aria-invalid={Boolean(form.formState.errors.username)}
+                aria-required="true"
                 id="admin-username"
                 maxLength={128}
-                onChange={(event) => setUsername(event.target.value)}
-                required
-                value={username}
+                {...form.register("username")}
               />
+              {form.formState.errors.username ? (
+                <p
+                  className="login-error"
+                  id="admin-username-error"
+                  role="alert"
+                >
+                  {form.formState.errors.username.message}
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="admin-password">密码</Label>
               <Input
                 autoComplete="current-password"
+                aria-describedby={
+                  form.formState.errors.password
+                    ? "admin-password-error"
+                    : undefined
+                }
+                aria-invalid={Boolean(form.formState.errors.password)}
+                aria-required="true"
                 id="admin-password"
                 maxLength={1024}
-                onChange={(event) => setPassword(event.target.value)}
-                required
                 type="password"
-                value={password}
+                {...form.register("password")}
               />
+              {form.formState.errors.password ? (
+                <p
+                  className="login-error"
+                  id="admin-password-error"
+                  role="alert"
+                >
+                  {form.formState.errors.password.message}
+                </p>
+              ) : null}
             </div>
             {login.isError ? (
               <p className="login-error" role="alert">

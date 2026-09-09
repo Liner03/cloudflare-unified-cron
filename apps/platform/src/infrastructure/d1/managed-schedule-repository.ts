@@ -34,6 +34,8 @@ const scheduleRowSchema = z.object({
   managed_by_registration: z.number(),
   declared_enabled: z.number(),
   operator_paused: z.number(),
+  target_enabled: z.number(),
+  dispatch_paused: z.number(),
   retired_at: z.number().nullable(),
   created_at: z.number(),
   updated_at: z.number(),
@@ -51,6 +53,8 @@ const scheduleListRowSchema = z.object({
   enabled: z.number(),
   declared_enabled: z.number(),
   operator_paused: z.number(),
+  target_enabled: z.number(),
+  dispatch_paused: z.number(),
   registration_key: z.string(),
   revision: z.number(),
   next_run_at: z.number().nullable(),
@@ -93,16 +97,24 @@ export class ManagedScheduleRepository {
         `SELECT s.id, s.name, s.description, s.target_id, s.action,
                 s.action_version, s.cron_expression, s.timezone, s.enabled,
                 s.declared_enabled, s.operator_paused, s.registration_key,
+                t.enabled AS target_enabled,
+                p.dispatch_paused,
                 s.revision, s.next_run_at,
                 (SELECT e.status FROM executions e WHERE e.schedule_id = s.id
                  ORDER BY e.created_at DESC, e.id DESC LIMIT 1) AS last_status,
                 (SELECT e.created_at FROM executions e WHERE e.schedule_id = s.id
                  ORDER BY e.created_at DESC, e.id DESC LIMIT 1) AS last_execution_at
          FROM schedules s
+         JOIN targets t ON t.id = s.target_id
+         JOIN platform_state p ON p.id = 1
          WHERE s.managed_by_registration = 1 AND s.retired_at IS NULL
            AND (? = '' OR s.name LIKE '%' || ? || '%' ESCAPE '\\')
            AND (? = '' OR s.target_id = ?)
-           AND (? = '' OR s.enabled = CASE ? WHEN 'true' THEN 1 ELSE 0 END)
+           AND (
+             ? = '' OR
+             (s.enabled = 1 AND t.enabled = 1 AND p.dispatch_paused = 0) =
+               CASE ? WHEN 'true' THEN 1 ELSE 0 END
+           )
          ORDER BY s.name, s.id
          LIMIT 50`,
       )
@@ -222,13 +234,19 @@ export class ManagedScheduleRepository {
   private async requireManaged(id: string): Promise<ScheduleRow> {
     const value = await this.db
       .prepare(
-        `SELECT id, name, description, target_id, action, action_version,
-                cron_expression, timezone, enabled, archived_at, revision,
-                payload_json, retry_policy_json, timeout_ms, misfire_policy,
-                misfire_grace_seconds, next_run_at, registration_key,
-                managed_by_registration, declared_enabled, operator_paused,
-                retired_at, created_at, updated_at
-         FROM schedules WHERE id = ? LIMIT 1`,
+        `SELECT s.id, s.name, s.description, s.target_id, s.action,
+                s.action_version, s.cron_expression, s.timezone, s.enabled,
+                s.archived_at, s.revision, s.payload_json,
+                s.retry_policy_json, s.timeout_ms, s.misfire_policy,
+                s.misfire_grace_seconds, s.next_run_at, s.registration_key,
+                s.managed_by_registration, s.declared_enabled,
+                s.operator_paused,
+                t.enabled AS target_enabled, p.dispatch_paused,
+                s.retired_at, s.created_at, s.updated_at
+         FROM schedules s
+         JOIN targets t ON t.id = s.target_id
+         JOIN platform_state p ON p.id = 1
+         WHERE s.id = ? LIMIT 1`,
       )
       .bind(id)
       .first();
@@ -301,6 +319,7 @@ function rowToInput(row: ScheduleRow): ScheduleInput {
 }
 
 function serializeSchedule(row: ScheduleRow) {
+  const blockingReasons = scheduleBlockingReasons(row);
   return {
     id: row.id,
     key: row.registration_key,
@@ -312,6 +331,8 @@ function serializeSchedule(row: ScheduleRow) {
     cronExpression: row.cron_expression,
     timezone: row.timezone,
     enabled: row.enabled === 1,
+    effectiveEnabled: blockingReasons.length === 0,
+    blockingReasons,
     archivedAt: toIso(row.archived_at),
     revision: row.revision,
     payload: jsonValueSchema.parse(JSON.parse(row.payload_json)),
@@ -331,6 +352,7 @@ function serializeSchedule(row: ScheduleRow) {
 
 function serializeListRow(value: unknown) {
   const row = scheduleListRowSchema.parse(value);
+  const blockingReasons = scheduleBlockingReasons(row);
   return {
     id: row.id,
     key: row.registration_key,
@@ -342,6 +364,8 @@ function serializeListRow(value: unknown) {
     cronExpression: row.cron_expression,
     timezone: row.timezone,
     enabled: row.enabled === 1,
+    effectiveEnabled: blockingReasons.length === 0,
+    blockingReasons,
     declaredEnabled: row.declared_enabled === 1,
     operatorPaused: row.operator_paused === 1,
     revision: row.revision,
@@ -351,6 +375,25 @@ function serializeListRow(value: unknown) {
         ? null
         : { status: row.last_status, at: toIso(row.last_execution_at) },
   };
+}
+
+type ScheduleStateRow = Pick<
+  ScheduleRow,
+  "declared_enabled" | "operator_paused" | "target_enabled" | "dispatch_paused"
+>;
+
+function scheduleBlockingReasons(row: ScheduleStateRow) {
+  const reasons: Array<
+    | "declared_disabled"
+    | "operator_paused"
+    | "target_disabled"
+    | "dispatch_paused"
+  > = [];
+  if (row.declared_enabled !== 1) reasons.push("declared_disabled");
+  if (row.operator_paused === 1) reasons.push("operator_paused");
+  if (row.target_enabled !== 1) reasons.push("target_disabled");
+  if (row.dispatch_paused === 1) reasons.push("dispatch_paused");
+  return reasons;
 }
 
 function escapeLike(value: string): string {

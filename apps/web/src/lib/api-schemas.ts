@@ -17,6 +17,13 @@ export const executionSummarySchema = z.object({
 
 export type ExecutionSummary = z.infer<typeof executionSummarySchema>;
 
+export const scheduleBlockingReasonSchema = z.enum([
+  "declared_disabled",
+  "operator_paused",
+  "target_disabled",
+  "dispatch_paused",
+]);
+
 export const scheduleSummarySchema = z.object({
   id: z.string(),
   key: z.string(),
@@ -28,6 +35,8 @@ export const scheduleSummarySchema = z.object({
   cronExpression: z.string(),
   timezone: z.string(),
   enabled: z.boolean(),
+  effectiveEnabled: z.boolean(),
+  blockingReasons: z.array(scheduleBlockingReasonSchema),
   declaredEnabled: z.boolean(),
   operatorPaused: z.boolean(),
   revision: z.number(),

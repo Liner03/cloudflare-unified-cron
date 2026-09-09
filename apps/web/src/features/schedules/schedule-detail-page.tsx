@@ -21,7 +21,11 @@ import {
 } from "@/components/ui/table";
 import { apiGet, apiMutate, errorMessage } from "@/lib/api-client";
 import { scheduleDetailSchema, stateMutationSchema } from "@/lib/api-schemas";
-import { formatTime, shortId } from "@/lib/format";
+import {
+  formatScheduleBlockingReasons,
+  formatTime,
+  shortId,
+} from "@/lib/format";
 
 export function ScheduleDetailPage() {
   const { id = "" } = useParams();
@@ -112,7 +116,7 @@ export function ScheduleDetailPage() {
           <CardHeader>
             <CardTitle>配置快照</CardTitle>
             <StatusBadge
-              status={schedule.enabled ? "enabled" : "schedule_paused"}
+              status={schedule.effectiveEnabled ? "enabled" : "schedule_paused"}
             />
           </CardHeader>
           <CardContent>
@@ -135,6 +139,8 @@ export function ScheduleDetailPage() {
                 {schedule.declaredEnabled ? "Worker 启用" : "Worker 停用"} ·{" "}
                 {schedule.operatorPaused ? "管理员暂停" : "无管理员覆盖"}
               </dd>
+              <dt>有效状态</dt>
+              <dd>{formatScheduleBlockingReasons(schedule.blockingReasons)}</dd>
               <dt>Retry</dt>
               <dd>
                 共 {schedule.retryPolicy.maxAttempts} 次 · delay [

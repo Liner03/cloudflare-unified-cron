@@ -242,6 +242,64 @@ describe("ExecutionRepository on D1", () => {
     expect(execution?.status).toBe("unknown");
   });
 
+  it("stops a queued retry before RPC when current idempotency was revoked", async () => {
+    const snapshot = JSON.stringify({
+      scheduleId: "schedule-1",
+      scheduleRevision: 1,
+      targetId: "DATA",
+      action: "healthCheck",
+      actionVersion: 1,
+      targetManifestRevision: "data-v1",
+      targetActionIdempotent: true,
+      payload: {},
+      retryPolicy: {
+        maxAttempts: 2,
+        delaysSeconds: [60],
+        retryOnUnknown: false,
+      },
+      timeoutMs: 30_000,
+      cronExpression: "* * * * *",
+      timezone: "UTC",
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE schedules SET next_run_at = ? WHERE id = 'schedule-1'",
+      ).bind(now + 60_000),
+      env.DB.prepare(
+        `UPDATE registered_actions SET idempotent = 0
+         WHERE target_id = 'DATA' AND name = 'healthCheck' AND version = 1`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO executions (
+           id, schedule_id, target_id, source, scheduled_for, dedupe_key,
+           schedule_revision, snapshot_json, status, available_at,
+           next_attempt_reason, attempt_count, attempt_limit, max_auto_attempts,
+           retry_deadline_at, created_at, updated_at
+         ) VALUES (
+           'queued-retry', 'schedule-1', 'DATA', 'cron', ?, 'queued-retry',
+           1, ?, 'retry_wait', ?, 'automatic_retry', 1, 2, 2, ?, ?, ?
+         )`,
+      ).bind(now - 60_000, snapshot, now, now + 60_000, now - 60_000, now),
+    ]);
+
+    const result = await createApplication(env, { nowMs: () => now }).tick.run(
+      now,
+    );
+    expect(result.dispatched).toBe(1);
+    const execution = await env.DB.prepare(
+      `SELECT status, attempt_count, last_error_json
+       FROM executions WHERE id = 'queued-retry'`,
+    ).first<{
+      status: string;
+      attempt_count: number;
+      last_error_json: string;
+    }>();
+    expect(execution).toMatchObject({ status: "failed", attempt_count: 2 });
+    expect(JSON.parse(execution!.last_error_json)).toMatchObject({
+      code: "RETRY_IDEMPOTENCY_REVOKED",
+    });
+  });
+
   it("cleans terminal history in bounded batches but never removes unknown", async () => {
     const snapshot = JSON.stringify({
       scheduleId: "schedule-1",

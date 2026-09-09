@@ -22,3 +22,18 @@ export function formatDuration(value: number | null): string {
 export function shortId(value: string): string {
   return value.length <= 12 ? value : `${value.slice(0, 8)}…${value.slice(-4)}`;
 }
+
+const scheduleBlockingLabels = {
+  declared_disabled: "Worker 声明停用",
+  operator_paused: "管理员暂停",
+  target_disabled: "Target 已停用",
+  dispatch_paused: "全局派发暂停",
+} as const;
+
+export function formatScheduleBlockingReasons(
+  reasons: Array<keyof typeof scheduleBlockingLabels>,
+): string {
+  return reasons.length === 0
+    ? "当前可派发"
+    : reasons.map((reason) => scheduleBlockingLabels[reason]).join(" · ");
+}

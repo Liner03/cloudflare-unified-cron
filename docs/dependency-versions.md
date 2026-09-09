@@ -13,6 +13,8 @@
 | Zod                       |          4.5.4 | 协议、API 与表单校验                  |
 | cron-parser               |         5.10.0 | 五字段 Cron、IANA timezone、DST       |
 | React / React DOM         |         19.2.8 | 控制台                                |
+| React Hook Form           |         7.87.0 | 表单状态与可访问错误                  |
+| @hookform/resolvers       |          5.9.1 | React Hook Form / Zod 适配            |
 | Vite                      |          8.2.2 | SPA 构建与开发代理                    |
 | Tailwind CSS              |          4.3.3 | shadcn 语义样式                       |
 | TanStack Query            |        5.102.8 | 缓存、轮询与失效                      |

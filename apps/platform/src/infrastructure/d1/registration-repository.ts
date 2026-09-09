@@ -131,34 +131,41 @@ export class RegistrationRepository {
       );
     }
 
-    const scheduleRows = declaration.schedules.map((schedule) => {
-      if (jsonByteLength(schedule.payload) > LIMITS.payloadBytes) {
-        throw new DomainError(
-          "invalid",
-          "PAYLOAD_TOO_LARGE",
-          `Schedule ${schedule.key} 的 payload 不得超过 16 KiB`,
-        );
-      }
-      return {
-        id: crypto.randomUUID(),
-        key: schedule.key,
-        name: schedule.name,
-        description: schedule.description,
-        action: schedule.action,
-        actionVersion: schedule.actionVersion,
-        cronExpression: schedule.cronExpression,
-        timezone: schedule.timezone,
-        declaredEnabled: schedule.enabled ? 1 : 0,
-        payloadJson: JSON.stringify(schedule.payload),
-        retryPolicyJson: JSON.stringify(schedule.retryPolicy),
-        timeoutMs: schedule.timeoutMs,
-        misfirePolicy: schedule.misfirePolicy,
-        misfireGraceSeconds: schedule.misfireGraceSeconds,
-        nextRunAt: schedule.enabled
-          ? this.cron.nextAfter(schedule.cronExpression, schedule.timezone, now)
-          : null,
-      };
-    });
+    const scheduleRows = await Promise.all(
+      declaration.schedules.map(async (schedule) => {
+        if (jsonByteLength(schedule.payload) > LIMITS.payloadBytes) {
+          throw new DomainError(
+            "invalid",
+            "PAYLOAD_TOO_LARGE",
+            `Schedule ${schedule.key} 的 payload 不得超过 16 KiB`,
+          );
+        }
+        return {
+          id: crypto.randomUUID(),
+          key: schedule.key,
+          name: schedule.name,
+          description: schedule.description,
+          action: schedule.action,
+          actionVersion: schedule.actionVersion,
+          cronExpression: schedule.cronExpression,
+          timezone: schedule.timezone,
+          declaredEnabled: schedule.enabled ? 1 : 0,
+          payloadJson: JSON.stringify(schedule.payload),
+          retryPolicyJson: JSON.stringify(schedule.retryPolicy),
+          timeoutMs: schedule.timeoutMs,
+          misfirePolicy: schedule.misfirePolicy,
+          misfireGraceSeconds: schedule.misfireGraceSeconds,
+          nextRunAt: schedule.enabled
+            ? this.cron.nextAfter(
+                schedule.cronExpression,
+                schedule.timezone,
+                now,
+              )
+            : null,
+          configHash: await sha256Hex(JSON.stringify(schedule)),
+        };
+      }),
+    );
     const actionRows = declaration.actions.map((action) => ({
       name: action.name,
       version: action.version,
@@ -277,7 +284,7 @@ export class RegistrationRepository {
                payload_json, retry_policy_json, timeout_ms, misfire_policy,
                misfire_grace_seconds, next_run_at, created_at, updated_at,
                registration_key, managed_by_registration, declared_enabled,
-               operator_paused, retired_at
+               operator_paused, retired_at, registration_config_hash
              )
              SELECT
                json_extract(item.value, '$.id'),
@@ -302,7 +309,8 @@ export class RegistrationRepository {
                1,
                json_extract(item.value, '$.declaredEnabled'),
                0,
-               NULL
+               NULL,
+               json_extract(item.value, '$.configHash')
              FROM json_each(?) AS item
              WHERE true
              ON CONFLICT(target_id, registration_key)
@@ -322,18 +330,7 @@ export class RegistrationRepository {
                archived_at = NULL,
                revision = schedules.revision + CASE
                  WHEN schedules.retired_at IS NOT NULL
-                   OR schedules.name <> excluded.name
-                   OR schedules.description <> excluded.description
-                   OR schedules.action <> excluded.action
-                   OR schedules.action_version <> excluded.action_version
-                   OR schedules.cron_expression <> excluded.cron_expression
-                   OR schedules.timezone <> excluded.timezone
-                   OR schedules.declared_enabled <> excluded.declared_enabled
-                   OR schedules.payload_json <> excluded.payload_json
-                   OR schedules.retry_policy_json <> excluded.retry_policy_json
-                   OR schedules.timeout_ms <> excluded.timeout_ms
-                   OR schedules.misfire_policy <> excluded.misfire_policy
-                   OR schedules.misfire_grace_seconds <> excluded.misfire_grace_seconds
+                   OR schedules.registration_config_hash IS NOT excluded.registration_config_hash
                  THEN 1 ELSE 0 END,
                payload_json = excluded.payload_json,
                retry_policy_json = excluded.retry_policy_json,
@@ -344,30 +341,26 @@ export class RegistrationRepository {
                  WHEN excluded.declared_enabled = 0
                       OR schedules.operator_paused = 1 THEN NULL
                  WHEN schedules.retired_at IS NULL
-                   AND schedules.name = excluded.name
-                   AND schedules.description = excluded.description
-                   AND schedules.action = excluded.action
-                   AND schedules.action_version = excluded.action_version
-                   AND schedules.cron_expression = excluded.cron_expression
-                   AND schedules.timezone = excluded.timezone
-                   AND schedules.declared_enabled = excluded.declared_enabled
-                   AND schedules.payload_json = excluded.payload_json
-                   AND schedules.retry_policy_json = excluded.retry_policy_json
-                   AND schedules.timeout_ms = excluded.timeout_ms
-                   AND schedules.misfire_policy = excluded.misfire_policy
-                   AND schedules.misfire_grace_seconds = excluded.misfire_grace_seconds
+                   AND schedules.registration_config_hash = excluded.registration_config_hash
                    AND schedules.next_run_at IS NOT NULL
                  THEN schedules.next_run_at
                  ELSE excluded.next_run_at
                END,
                declared_enabled = excluded.declared_enabled,
                retired_at = NULL,
+               registration_config_hash = excluded.registration_config_hash,
                updated_at = excluded.updated_at`,
           )
           .bind(principal.targetId, now, now, JSON.stringify(scheduleRows)),
       );
     }
     statements.push(
+      this.db.prepare(
+        `SELECT CASE WHEN COUNT(*) <= 50 THEN 1 ELSE json('') END
+           AS schedule_capacity_guard
+         FROM schedules
+         WHERE managed_by_registration = 1 AND retired_at IS NULL`,
+      ),
       this.db
         .prepare("UPDATE registration_tokens SET last_used_at = ? WHERE id = ?")
         .bind(now, principal.tokenId),
@@ -399,6 +392,7 @@ export class RegistrationRepository {
         declaration.registrationRevision,
         documentHash,
         now,
+        declaration.schedules.length,
       );
     }
     return resultView(
@@ -457,6 +451,7 @@ export class RegistrationRepository {
     registrationRevision: string,
     documentHash: string,
     now: number,
+    declaredScheduleCount?: number,
   ): Promise<never> {
     if (
       error instanceof Error &&
@@ -489,6 +484,22 @@ export class RegistrationRepository {
           "REGISTRATION_TOKEN_INVALID",
           "Registration Token 无效、已过期或已撤销",
         );
+      }
+      if (declaredScheduleCount !== undefined) {
+        const otherSchedules = await this.db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM schedules
+             WHERE target_id <> ? AND managed_by_registration = 1
+               AND retired_at IS NULL`,
+          )
+          .bind(principal.targetId)
+          .first();
+        if (
+          countSchema.parse(otherSchedules).count + declaredScheduleCount >
+          50
+        ) {
+          throw scheduleLimitReached();
+        }
       }
       throw new DomainError(
         "conflict",

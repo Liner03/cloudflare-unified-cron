@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { apiGet } from "@/lib/api-client";
 import { schedulesSchema, type ScheduleSummary } from "@/lib/api-schemas";
-import { formatTime } from "@/lib/format";
+import { formatScheduleBlockingReasons, formatTime } from "@/lib/format";
 
 const columnHelper = createColumnHelper<ScheduleSummary>();
 
@@ -97,17 +97,18 @@ export function SchedulesPage() {
       header: "最近 / 状态",
       cell: ({ row }) => (
         <div className="grid justify-items-start gap-1.5">
+          <StatusBadge
+            status={
+              row.original.effectiveEnabled ? "enabled" : "schedule_paused"
+            }
+          />
           {row.original.lastExecution ? (
             <StatusBadge status={row.original.lastExecution.status} />
           ) : (
             <span className="text-xs text-muted-foreground">尚未运行</span>
           )}
           <span className="text-xs text-muted-foreground">
-            {row.original.operatorPaused
-              ? "管理员暂停"
-              : row.original.declaredEnabled
-                ? "Worker 声明启用"
-                : "Worker 声明停用"}
+            {formatScheduleBlockingReasons(row.original.blockingReasons)}
           </span>
         </div>
       ),
@@ -166,8 +167,8 @@ export function SchedulesPage() {
           value={enabled}
         >
           <option value="">全部状态</option>
-          <option value="true">已启用</option>
-          <option value="false">已暂停</option>
+          <option value="true">当前可派发</option>
+          <option value="false">当前被阻止</option>
         </Select>
       </div>
       <section className="ledger-section">

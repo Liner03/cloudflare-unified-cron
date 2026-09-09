@@ -161,6 +161,28 @@ export class TickApplication {
       );
     }
     const { target, action } = capability;
+    if (
+      claim.next_attempt_reason !== "initial" &&
+      (!snapshot.targetActionIdempotent || !action.idempotent)
+    ) {
+      return this.repository.finalize(
+        claim,
+        makeFailureDecision({
+          snapshot,
+          attemptNumber: claim.attempt_count,
+          nowMs,
+          retryDeadlineAt: nowMs,
+          currentIdempotent: false,
+          retryable: false,
+          unknown: false,
+          errorJson: JSON.stringify({
+            code: "RETRY_IDEMPOTENCY_REVOKED",
+            message: "Action 不再同时满足快照与当前幂等声明，Retry 已安全终止",
+          }),
+        }),
+        nowMs,
+      );
+    }
     const request: CronRequestV1 = {
       protocolVersion: 1,
       executionId: claim.id,
@@ -189,7 +211,7 @@ export class TickApplication {
         claim.deadline_at - nowMs,
       );
       decision = result.ok
-        ? successDecision(result, claim.attempt_id, this.clock.nowMs())
+        ? makeSuccessDecision(result, claim.attempt_id, this.clock.nowMs())
         : makeFailureDecision({
             snapshot,
             attemptNumber: claim.attempt_count,
@@ -234,7 +256,7 @@ export class TickApplication {
   }
 }
 
-function successDecision(
+export function makeSuccessDecision(
   result: Extract<CronResultV1, { ok: true }>,
   attemptId: string,
   nowMs: number,
@@ -244,7 +266,11 @@ function successDecision(
     attemptStatus: "succeeded",
     availableAt: nowMs,
     nextAttemptReason: "initial",
-    resultJson: JSON.stringify({ summary: result.summary, attemptId }),
+    resultJson: JSON.stringify({
+      summary: result.summary,
+      output: result.output,
+      attemptId,
+    }),
     errorJson: null,
     targetBuildId: result.targetBuildId ?? null,
   };

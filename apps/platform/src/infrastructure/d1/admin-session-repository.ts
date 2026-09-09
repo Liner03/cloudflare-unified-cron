@@ -1,6 +1,5 @@
+import { ADMIN_SESSION_TTL_MS } from "../../domain/auth";
 import { randomBase64Url, sha256Hex } from "../security/crypto";
-
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 /** Owns opaque administrator session persistence and token hashing. */
 export class AdminSessionRepository {
@@ -22,7 +21,7 @@ export class AdminSessionRepository {
     now: number,
   ): Promise<{ token: string; expiresAt: number }> {
     const token = `ucas_${randomBase64Url(32)}`;
-    const expiresAt = now + SESSION_TTL_MS;
+    const expiresAt = now + ADMIN_SESSION_TTL_MS;
     await this.db.batch([
       this.db
         .prepare(
