@@ -1,4 +1,8 @@
-import { createCronHandler, defineAction } from "@unified-cron/worker-sdk";
+import {
+  createCronHandler,
+  createRegistrationClient,
+  defineAction,
+} from "@unified-cron/worker-sdk";
 import { CronEntrypointBase } from "@unified-cron/worker-sdk/entrypoint";
 import { jsonValueSchema } from "@unified-cron/contracts";
 import { z } from "zod";
@@ -48,6 +52,69 @@ const cronHandler = createCronHandler<Env>({
     },
   }),
 });
+
+export function publishRegistration(env: Env) {
+  return createRegistrationClient({
+    endpoint: env.PLATFORM_REGISTRATION_URL,
+    token: env.REGISTRATION_TOKEN,
+  }).register({
+    protocolVersion: 1,
+    registrationRevision: env.BUILD_ID,
+    worker: { label: "Data Worker" },
+    actions: [
+      {
+        name: "healthCheck",
+        version: 1,
+        label: "健康检查",
+        description: "无副作用检查示例 Worker",
+        idempotent: true,
+        examplePayload: {},
+      },
+      {
+        name: "syncUsers",
+        version: 1,
+        label: "同步用户",
+        description: "展示业务侧持久化幂等的示例 Action",
+        idempotent: true,
+        examplePayload: { source: "crm" },
+      },
+    ],
+    schedules: [
+      {
+        key: "health-check",
+        name: "Worker 健康检查",
+        description: "由 Data Worker 完整声明",
+        action: "healthCheck",
+        actionVersion: 1,
+        cronExpression: "*/5 * * * *",
+        timezone: "UTC",
+        enabled: true,
+        payload: {},
+        retryPolicy: {
+          maxAttempts: 1,
+          delaysSeconds: [],
+          retryOnUnknown: false,
+        },
+      },
+      {
+        key: "sync-users",
+        name: "同步用户",
+        description: "每小时从 CRM 收敛同步用户",
+        action: "syncUsers",
+        actionVersion: 1,
+        cronExpression: "0 * * * *",
+        timezone: "UTC",
+        enabled: true,
+        payload: { source: "crm" },
+        retryPolicy: {
+          maxAttempts: 3,
+          delaysSeconds: [60, 300],
+          retryOnUnknown: true,
+        },
+      },
+    ],
+  });
+}
 
 export class CronEntrypoint extends CronEntrypointBase<Env> {
   cron(input: unknown): Promise<unknown> {
