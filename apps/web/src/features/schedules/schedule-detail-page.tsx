@@ -1,12 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Archive,
-  ArrowLeft,
-  CirclePause,
-  CirclePlay,
-  Pencil,
-  Play,
-} from "lucide-react";
+import { ArrowLeft, CirclePause, CirclePlay, Play } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ActionConfirm } from "@/components/shared/action-confirm";
@@ -45,7 +38,7 @@ export function ScheduleDetailPage() {
     enabled: id.length > 0,
   });
   const mutation = useMutation({
-    mutationFn: async (operation: "run" | "pause" | "resume" | "archive") => {
+    mutationFn: async (operation: "run" | "pause" | "resume") => {
       const schedule = query.data?.data;
       if (!schedule) throw new Error("Schedule 尚未加载");
       if (operation === "run") {
@@ -70,10 +63,7 @@ export function ScheduleDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["schedules"] }),
         queryClient.invalidateQueries({ queryKey: ["overview"] }),
       ]);
-      if (operation === "archive") {
-        toast.success("Schedule 已归档");
-        void navigate("/schedules");
-      } else if (operation === "run" && "executionId" in result.data) {
+      if (operation === "run" && "executionId" in result.data) {
         toast.success("执行意图已保存");
         void navigate(`/executions/${String(result.data.executionId)}`);
       } else {
@@ -107,11 +97,6 @@ export function ScheduleDetailPage() {
         title={schedule.name}
       />
       <div className="mb-5 flex flex-wrap gap-2">
-        <Button asChild variant="outline">
-          <Link to={`/schedules/${schedule.id}/edit`}>
-            <Pencil size={15} /> 编辑
-          </Link>
-        </Button>
         <ActionConfirm
           confirmLabel="立即安排"
           description="这会创建新的 Execution 和新的幂等键。HTTP 请求只保存意图，业务 RPC 将由后续可用 Tick 领取。"
@@ -123,10 +108,10 @@ export function ScheduleDetailPage() {
             </Button>
           }
         />
-        {schedule.enabled ? (
+        {!schedule.operatorPaused ? (
           <ActionConfirm
             confirmLabel="暂停计划"
-            description="暂停只停止新的 cron Execution；现有 pending、retry_wait、running 或 unknown 不会被删除。"
+            description="管理员覆盖会持续存在，后续 Registration 不能清除；现有 Execution 不会被删除。"
             onConfirm={() => mutation.mutate("pause")}
             title="暂停新的定时发生？"
             trigger={
@@ -138,7 +123,7 @@ export function ScheduleDetailPage() {
         ) : (
           <ActionConfirm
             confirmLabel="恢复计划"
-            description="恢复时会从当前时间重新计算 next_run_at，默认不追补暂停期间的发生。"
+            description="只清除管理员覆盖。若 Worker 声明为停用，Schedule 仍不会产生新执行。"
             onConfirm={() => mutation.mutate("resume")}
             title="恢复定时计划？"
             trigger={
@@ -148,18 +133,6 @@ export function ScheduleDetailPage() {
             }
           />
         )}
-        <ActionConfirm
-          confirmLabel="归档"
-          danger
-          description="归档是软删除；存在 active 或 unknown Execution 时服务端会拒绝。历史记录继续保留。"
-          onConfirm={() => mutation.mutate("archive")}
-          title="归档这个 Schedule？"
-          trigger={
-            <Button disabled={mutation.isPending} variant="ghost">
-              <Archive size={15} /> 归档
-            </Button>
-          }
-        />
       </div>
 
       <div className="detail-grid">
@@ -182,6 +155,13 @@ export function ScheduleDetailPage() {
               <dd className="mono">
                 {schedule.targetId} / {schedule.action} / v
                 {schedule.actionVersion}
+              </dd>
+              <dt>Registration key</dt>
+              <dd className="mono">{schedule.key}</dd>
+              <dt>声明 / 覆盖</dt>
+              <dd>
+                {schedule.declaredEnabled ? "Worker 启用" : "Worker 停用"} ·{" "}
+                {schedule.operatorPaused ? "管理员暂停" : "无管理员覆盖"}
               </dd>
               <dt>Retry</dt>
               <dd>

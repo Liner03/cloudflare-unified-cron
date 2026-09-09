@@ -32,6 +32,11 @@ const labels: Record<string, string> = {
   not_synced: "未同步",
   neutral: "尚未检查",
   dispatch_unavailable: "派发状态不可用",
+  registered: "已注册",
+  unregistered: "待注册",
+  active: "有效",
+  revoked: "已撤销",
+  expired: "已过期",
 };
 
 const icons: Record<string, LucideIcon> = {
@@ -56,6 +61,11 @@ const icons: Record<string, LucideIcon> = {
   not_synced: CircleDashed,
   neutral: CircleDashed,
   dispatch_unavailable: CircleDashed,
+  registered: CircleCheck,
+  unregistered: CircleDashed,
+  active: CircleCheck,
+  revoked: CircleOff,
+  expired: CircleAlert,
 };
 
 export function StatusBadge({ status }: { status: string }) {

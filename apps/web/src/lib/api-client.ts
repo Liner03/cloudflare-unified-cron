@@ -78,6 +78,9 @@ async function request<Schema extends z.ZodType>(
     );
   }
   if (!response.ok) {
+    if (response.status === 401 && !path.endsWith("/auth/login")) {
+      window.dispatchEvent(new Event("unified-cron:auth-required"));
+    }
     const error = errorEnvelopeSchema.safeParse(value);
     if (error.success) {
       throw new ApiClientError(

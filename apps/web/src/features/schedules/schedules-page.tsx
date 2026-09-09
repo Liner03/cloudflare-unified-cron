@@ -5,7 +5,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { CalendarPlus, Play, Search } from "lucide-react";
+import { Play, Search } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -122,7 +122,11 @@ export function SchedulesPage() {
             <span className="text-xs text-muted-foreground">尚未运行</span>
           )}
           <span className="text-xs text-muted-foreground">
-            {row.original.enabled ? "已启用" : "已暂停"}
+            {row.original.operatorPaused
+              ? "管理员暂停"
+              : row.original.declaredEnabled
+                ? "Worker 声明启用"
+                : "Worker 声明停用"}
           </span>
         </div>
       ),
@@ -158,15 +162,7 @@ export function SchedulesPage() {
   return (
     <>
       <PageHeader
-        action={
-          <Button asChild>
-            <Link to="/schedules/new">
-              <CalendarPlus size={16} />
-              新建计划
-            </Link>
-          </Button>
-        }
-        description="每个计划绑定一个白名单 Action。暂停只停止新的 cron 发生，已有执行意图不会被删除。"
+        description="计划配置来自业务 Worker 的完整 Registration；管理员只能暂停覆盖或安排一次受控运行。"
         title="计划"
       />
       <div className="toolbar" role="search">
@@ -214,13 +210,13 @@ export function SchedulesPage() {
           <EmptyState
             action={
               <Button asChild size="sm" variant="outline">
-                <Link to="/schedules/new">创建第一个计划</Link>
+                <Link to="/registrations">查看注册状态</Link>
               </Button>
             }
             description={
               search || enabled
-                ? "调整筛选条件，或创建新的逻辑计划。"
-                : "Target manifest 同步后即可建立暂停计划并预览时间。"
+                ? "调整筛选条件，或检查 Worker 最新 Registration。"
+                : "为 Target 签发 Token，并由业务 Worker 发布完整 Registration。"
             }
             title={search || enabled ? "没有匹配的计划" : "尚无 Schedule"}
           />

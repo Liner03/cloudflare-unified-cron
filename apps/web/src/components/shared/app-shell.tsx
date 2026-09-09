@@ -2,6 +2,8 @@ import {
   Activity,
   CalendarClock,
   Clock3,
+  KeyRound,
+  LogOut,
   Menu,
   Moon,
   RadioTower,
@@ -12,12 +14,14 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/features/auth/auth-gate";
 
 const nav = [
   { to: "/", label: "运行总览", icon: Activity },
   { to: "/schedules", label: "计划", icon: CalendarClock },
   { to: "/executions", label: "执行记录", icon: Clock3 },
   { to: "/targets", label: "目标服务", icon: RadioTower },
+  { to: "/registrations", label: "注册与凭据", icon: KeyRound },
   { to: "/system", label: "系统", icon: ServerCog },
 ];
 
@@ -26,6 +30,7 @@ const titles: Record<string, string> = {
   "/schedules": "计划",
   "/executions": "执行记录",
   "/targets": "目标服务",
+  "/registrations": "注册与凭据",
   "/system": "系统",
 };
 
@@ -43,6 +48,7 @@ function useMobileViewport(): boolean {
 }
 
 export function AppShell() {
+  const auth = useAuth();
   const location = useLocation();
   const mobileViewport = useMobileViewport();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -160,16 +166,32 @@ export function AppShell() {
             </Button>
             <span className="truncate text-sm font-semibold">{title}</span>
           </div>
-          <Button
-            aria-label={dark ? "切换浅色模式" : "切换深色模式"}
-            className="size-11"
-            onClick={() => setDark((value) => !value)}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            {dark ? <Sun size={17} /> : <Moon size={17} />}
-          </Button>
+          <div className="flex items-center gap-1">
+            <span className="mr-2 hidden text-xs text-muted-foreground sm:inline">
+              {auth.username}
+            </span>
+            <Button
+              aria-label={dark ? "切换浅色模式" : "切换深色模式"}
+              className="size-11"
+              onClick={() => setDark((value) => !value)}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              {dark ? <Sun size={17} /> : <Moon size={17} />}
+            </Button>
+            <Button
+              aria-label="退出管理员登录"
+              className="size-11"
+              disabled={auth.loggingOut}
+              onClick={() => auth.logout()}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <LogOut size={17} />
+            </Button>
+          </div>
         </header>
         <div className="page-content">
           <Outlet />
