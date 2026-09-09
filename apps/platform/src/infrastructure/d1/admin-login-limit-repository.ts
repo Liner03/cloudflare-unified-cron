@@ -1,4 +1,4 @@
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 import { sha256Hex } from "../security/crypto";
 
 const WINDOW_MS = 15 * 60 * 1000;
@@ -24,8 +24,8 @@ export class AdminLoginLimitRepository {
       blockedUntil !== undefined &&
       blockedUntil > now
     ) {
-      throw new ApiError(
-        429,
+      throw new DomainError(
+        "rate_limited",
         "LOGIN_RATE_LIMITED",
         "登录尝试过多，请稍后重试",
         { retryAfterSeconds: Math.ceil((blockedUntil - now) / 1000) },

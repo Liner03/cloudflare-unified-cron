@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ExecutionOperationsRepository } from "../../infrastructure/d1/execution-operations-repository";
 import { ApiError } from "../errors";
 import { parseCursor, parseOptionalTime, parseOrThrow } from "../http-support";
-import { executeIdempotentMutation } from "../../infrastructure/d1/idempotent-mutation";
+import { executeIdempotentMutation } from "../idempotent-mutation";
 import { parseMutationBody } from "../request-body";
 import type { ApiRouter } from "../router";
 import { resolveExecutionSchema, riskConfirmationSchema } from "../schemas";

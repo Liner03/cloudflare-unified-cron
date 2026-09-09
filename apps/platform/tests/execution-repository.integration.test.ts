@@ -23,6 +23,7 @@ describe("ExecutionRepository on D1", () => {
       env.DB.prepare("DELETE FROM executions"),
       env.DB.prepare("DELETE FROM schedules"),
       env.DB.prepare("DELETE FROM registered_actions"),
+      env.DB.prepare("DELETE FROM registration_revisions"),
       env.DB.prepare("DELETE FROM registrations"),
       env.DB.prepare("DELETE FROM registration_tokens"),
       env.DB.prepare("DELETE FROM targets"),
@@ -101,6 +102,26 @@ describe("ExecutionRepository on D1", () => {
       "SELECT COUNT(*) AS count FROM attempts",
     ).first<{ count: number }>();
     expect(attempts?.count).toBe(1);
+  });
+
+  it("does not dispatch an existing intent while its Operator Override is paused", async () => {
+    const due = (await repository.listDue(now, 2))[0]!;
+    await repository.materializeDue(due, now);
+    await env.DB.prepare(
+      `UPDATE schedules
+       SET enabled = 0, operator_paused = 1, next_run_at = NULL
+       WHERE id = 'schedule-1'`,
+    ).run();
+    expect(await repository.listReady(now, 2)).toHaveLength(0);
+
+    await env.DB.prepare(
+      `UPDATE schedules
+       SET enabled = 1, operator_paused = 0, next_run_at = ?
+       WHERE id = 'schedule-1'`,
+    )
+      .bind(now + 60_000)
+      .run();
+    expect(await repository.listReady(now, 2)).toHaveLength(1);
   });
 
   it("rolls back materialization when advancing next_run_at fails", async () => {

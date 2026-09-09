@@ -1,4 +1,4 @@
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 import { serializeExecutionSummary } from "./execution-view";
 import { SuccessRateRepository } from "./success-rate-repository";
 
@@ -36,8 +36,8 @@ export class OverviewRepository {
     ]);
     const [counts, recent, summary, state] = batch;
     if (!counts || !recent || !summary || !state) {
-      throw new ApiError(
-        503,
+      throw new DomainError(
+        "unavailable",
         "D1_BATCH_INCOMPLETE",
         "D1 未返回完整 overview 结果",
       );

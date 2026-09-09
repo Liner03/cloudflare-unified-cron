@@ -1,4 +1,4 @@
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 import type { MutationPlan } from "./idempotent-mutation";
 
 export class SystemRepository {
@@ -9,7 +9,11 @@ export class SystemRepository {
       .prepare("SELECT * FROM platform_state WHERE id = 1 LIMIT 1")
       .first();
     if (!state) {
-      throw new ApiError(503, "PLATFORM_STATE_MISSING", "平台尚未初始化");
+      throw new DomainError(
+        "unavailable",
+        "PLATFORM_STATE_MISSING",
+        "平台尚未初始化",
+      );
     }
     return {
       data: {

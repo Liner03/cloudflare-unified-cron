@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 import { getTargetManifest } from "../../targets.manifest";
 import { randomBase64Url, sha256Hex } from "../security/crypto";
 
@@ -16,6 +16,8 @@ const tokenListRowSchema = z.object({
   registration_revision: z.string().nullable(),
   worker_label: z.string().nullable(),
   registered_at: z.number().nullable(),
+  rotated_from_id: z.string().nullable(),
+  replaced_by_id: z.string().nullable(),
 });
 
 export interface RegistrationTokenPrincipal {
@@ -38,6 +40,8 @@ export interface RegistrationTokenView {
     workerLabel: string | null;
     registeredAt: string | null;
   } | null;
+  rotatedFromId: string | null;
+  replacedById: string | null;
 }
 
 /** Owns the full lifecycle of one-target, write-only machine credentials. */
@@ -64,7 +68,8 @@ export class RegistrationTokenRepository {
       .prepare(
         `SELECT rt.id, rt.target_id, rt.label, rt.scope, rt.expires_at,
                 rt.last_used_at, rt.revoked_at, rt.created_by, rt.created_at,
-                r.registration_revision, r.worker_label, r.registered_at
+                r.registration_revision, r.worker_label, r.registered_at,
+                rt.rotated_from_id, rt.replaced_by_id
          FROM registration_tokens rt
          LEFT JOIN registrations r ON r.target_id = rt.target_id
          ORDER BY rt.created_at DESC, rt.id DESC
@@ -88,8 +93,8 @@ export class RegistrationTokenRepository {
     expiresAt: string;
   }> {
     if (!getTargetManifest(input.targetId)) {
-      throw new ApiError(
-        422,
+      throw new DomainError(
+        "invalid",
         "TARGET_NOT_PREAUTHORIZED",
         "Target 不在部署白名单中",
       );
@@ -99,8 +104,8 @@ export class RegistrationTokenRepository {
       .bind(input.targetId)
       .first();
     if (!target) {
-      throw new ApiError(
-        422,
+      throw new DomainError(
+        "invalid",
         "TARGET_NOT_SYNCED",
         "Target manifest 尚未同步到 D1",
       );
@@ -161,8 +166,8 @@ export class RegistrationTokenRepository {
       .bind(input.id)
       .first<{ revoked_at: number | null }>();
     if (!current) {
-      throw new ApiError(
-        404,
+      throw new DomainError(
+        "not_found",
         "REGISTRATION_TOKEN_NOT_FOUND",
         "Registration Token 不存在",
       );
@@ -216,6 +221,122 @@ export class RegistrationTokenRepository {
       };
     }
   }
+
+  async rotate(input: {
+    id: string;
+    expiresInDays: number;
+    actor: string;
+    now: number;
+  }): Promise<{
+    id: string;
+    targetId: string;
+    label: string;
+    token: string;
+    expiresAt: string;
+    rotatedFromId: string;
+  }> {
+    const current = await this.db
+      .prepare(
+        `SELECT id, target_id, label, expires_at, revoked_at, replaced_by_id
+         FROM registration_tokens WHERE id = ? LIMIT 1`,
+      )
+      .bind(input.id)
+      .first<{
+        id: string;
+        target_id: string;
+        label: string;
+        expires_at: number;
+        revoked_at: number | null;
+        replaced_by_id: string | null;
+      }>();
+    if (!current) {
+      throw new DomainError(
+        "not_found",
+        "REGISTRATION_TOKEN_NOT_FOUND",
+        "Registration Token 不存在",
+      );
+    }
+    if (
+      current.revoked_at !== null ||
+      current.replaced_by_id !== null ||
+      current.expires_at <= input.now
+    ) {
+      throw tokenNotActive();
+    }
+
+    const id = crypto.randomUUID();
+    const rawToken = `ucrt_${randomBase64Url(32)}`;
+    const expiresAt = input.now + input.expiresInDays * 24 * 60 * 60 * 1000;
+    try {
+      await this.db.batch([
+        this.db
+          .prepare(
+            `INSERT INTO registration_tokens (
+               id, target_id, label, token_hash, expires_at, created_by,
+               created_at, rotated_from_id
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            id,
+            current.target_id,
+            current.label,
+            await sha256Hex(rawToken),
+            expiresAt,
+            input.actor,
+            input.now,
+            current.id,
+          ),
+        this.db
+          .prepare(
+            `UPDATE registration_tokens
+             SET revoked_at = ?, replaced_by_id = ?
+             WHERE id = ? AND revoked_at IS NULL AND replaced_by_id IS NULL
+               AND expires_at > ?`,
+          )
+          .bind(input.now, id, current.id, input.now),
+        this.db.prepare(
+          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('') END AS rotation_guard",
+        ),
+        this.db
+          .prepare(
+            `INSERT INTO audit_events (
+               id, actor, action, entity_type, entity_id, changes_json,
+               created_at
+             ) VALUES (?, ?, 'registration_token.rotated',
+                       'registration_token', ?, ?, ?)`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            input.actor,
+            current.id,
+            JSON.stringify({
+              replacementTokenId: id,
+              targetId: current.target_id,
+              expiresAt,
+            }),
+            input.now,
+          ),
+      ]);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /malformed JSON|constraint failed|UNIQUE constraint/i.test(
+          error.message,
+        )
+      ) {
+        throw tokenNotActive();
+      }
+      throw error;
+    }
+    return {
+      id,
+      targetId: current.target_id,
+      label: current.label,
+      token: rawToken,
+      expiresAt: new Date(expiresAt).toISOString(),
+      rotatedFromId: current.id,
+    };
+  }
 }
 
 function serializeToken(value: unknown): RegistrationTokenView {
@@ -238,6 +359,8 @@ function serializeToken(value: unknown): RegistrationTokenView {
             workerLabel: row.worker_label,
             registeredAt: nullableIso(row.registered_at),
           },
+    rotatedFromId: row.rotated_from_id,
+    replacedById: row.replaced_by_id,
   };
 }
 
@@ -247,4 +370,12 @@ function toIso(value: number): string {
 
 function nullableIso(value: number | null): string | null {
   return value === null ? null : toIso(value);
+}
+
+function tokenNotActive(): DomainError {
+  return new DomainError(
+    "conflict",
+    "REGISTRATION_TOKEN_NOT_ACTIVE",
+    "Registration Token 已撤销、已过期或已被轮换",
+  );
 }

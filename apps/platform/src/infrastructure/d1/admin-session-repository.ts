@@ -25,9 +25,6 @@ export class AdminSessionRepository {
     const expiresAt = now + SESSION_TTL_MS;
     await this.db.batch([
       this.db
-        .prepare("DELETE FROM admin_sessions WHERE expires_at <= ?")
-        .bind(now),
-      this.db
         .prepare(
           `INSERT INTO admin_sessions (
              token_hash, username, created_at, last_seen_at, expires_at

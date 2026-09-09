@@ -4,7 +4,7 @@ import {
   type WorkerRegistrationV1,
 } from "@unified-cron/contracts";
 import { z } from "zod";
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 import { getTargetManifest } from "../../targets.manifest";
 import { CronCalculator } from "../cron/cron-calculator";
 import { sha256Hex } from "../security/crypto";
@@ -13,6 +13,11 @@ const existingRegistrationSchema = z.object({
   registration_revision: z.string(),
   document_hash: z.string(),
   registered_at: z.number(),
+});
+
+const historicalRevisionSchema = z.object({
+  document_hash: z.string(),
+  first_seen_at: z.number(),
 });
 
 const countSchema = z.object({ count: z.number() });
@@ -48,8 +53,8 @@ export class RegistrationRepository {
     declaration: WorkerRegistrationV1,
   ): Promise<AppliedRegistration> {
     if (!getTargetManifest(principal.targetId)) {
-      throw new ApiError(
-        403,
+      throw new DomainError(
+        "forbidden",
         "TARGET_NOT_PREAUTHORIZED",
         "Token 绑定的 Target 不在部署白名单中",
       );
@@ -59,36 +64,64 @@ export class RegistrationRepository {
       .bind(principal.targetId)
       .first();
     if (!target) {
-      throw new ApiError(
-        409,
+      throw new DomainError(
+        "conflict",
         "TARGET_NOT_SYNCED",
         "Target manifest 尚未同步到 D1",
       );
     }
 
     const documentHash = await sha256Hex(JSON.stringify(declaration));
-    const currentValue = await this.db
-      .prepare(
-        `SELECT registration_revision, document_hash, registered_at
-         FROM registrations WHERE target_id = ? LIMIT 1`,
-      )
-      .bind(principal.targetId)
-      .first();
+    const now = Date.now();
+    const [currentValue, historicalValue, otherScheduleCountValue] =
+      await Promise.all([
+        this.db
+          .prepare(
+            `SELECT registration_revision, document_hash, registered_at
+             FROM registrations WHERE target_id = ? LIMIT 1`,
+          )
+          .bind(principal.targetId)
+          .first(),
+        this.db
+          .prepare(
+            `SELECT document_hash, first_seen_at
+             FROM registration_revisions
+             WHERE target_id = ? AND registration_revision = ? LIMIT 1`,
+          )
+          .bind(principal.targetId, declaration.registrationRevision)
+          .first(),
+        this.db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM schedules
+             WHERE target_id <> ? AND managed_by_registration = 1
+               AND retired_at IS NULL`,
+          )
+          .bind(principal.targetId)
+          .first(),
+      ]);
     const current = currentValue
       ? existingRegistrationSchema.parse(currentValue)
       : null;
-    if (current?.registration_revision === declaration.registrationRevision) {
-      if (current.document_hash !== documentHash) {
-        throw new ApiError(
-          409,
-          "REGISTRATION_REVISION_CONFLICT",
-          "相同 registrationRevision 已用于不同声明",
-        );
-      }
-      await this.db
-        .prepare("UPDATE registration_tokens SET last_used_at = ? WHERE id = ?")
-        .bind(Date.now(), principal.tokenId)
-        .run();
+    const historical = historicalValue
+      ? historicalRevisionSchema.parse(historicalValue)
+      : null;
+    if (historical !== null && historical.document_hash !== documentHash) {
+      throw revisionConflict();
+    }
+    const otherScheduleCount = countSchema.parse(otherScheduleCountValue).count;
+    if (otherScheduleCount + declaration.schedules.length > 50) {
+      throw scheduleLimitReached();
+    }
+    if (
+      current?.registration_revision === declaration.registrationRevision &&
+      current.document_hash === documentHash
+    ) {
+      await this.confirmNoopRegistration(
+        principal,
+        declaration.registrationRevision,
+        documentHash,
+        now,
+      );
       return resultView(
         principal.targetId,
         declaration,
@@ -98,11 +131,10 @@ export class RegistrationRepository {
       );
     }
 
-    const now = Date.now();
     const scheduleRows = declaration.schedules.map((schedule) => {
       if (jsonByteLength(schedule.payload) > LIMITS.payloadBytes) {
-        throw new ApiError(
-          422,
+        throw new DomainError(
+          "invalid",
           "PAYLOAD_TOO_LARGE",
           `Schedule ${schedule.key} 的 payload 不得超过 16 KiB`,
         );
@@ -154,6 +186,13 @@ export class RegistrationRepository {
     const retiredSchedules = countSchema.parse(retiredValue).count;
 
     const statements: D1PreparedStatement[] = [
+      this.activeTokenGuard(principal, now),
+      ...this.revisionGuardStatements(
+        principal,
+        declaration.registrationRevision,
+        documentHash,
+        now,
+      ),
       current === null
         ? this.db
             .prepare(
@@ -192,6 +231,17 @@ export class RegistrationRepository {
       this.db.prepare(
         "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('') END AS registration_guard",
       ),
+      this.db
+        .prepare(
+          `UPDATE schedules
+           SET enabled = 0, declared_enabled = 0,
+               archived_at = ?, retired_at = ?, next_run_at = NULL,
+               revision = revision + 1, updated_at = ?
+           WHERE target_id = ? AND managed_by_registration = 1
+             AND retired_at IS NULL
+             AND registration_key NOT IN (SELECT value FROM json_each(?))`,
+        )
+        .bind(now, now, now, principal.targetId, declaredKeysJson),
       this.db
         .prepare("DELETE FROM registered_actions WHERE target_id = ?")
         .bind(principal.targetId),
@@ -319,17 +369,6 @@ export class RegistrationRepository {
     }
     statements.push(
       this.db
-        .prepare(
-          `UPDATE schedules
-           SET enabled = 0, declared_enabled = 0,
-               archived_at = ?, retired_at = ?, next_run_at = NULL,
-               revision = revision + 1, updated_at = ?
-           WHERE target_id = ? AND managed_by_registration = 1
-             AND retired_at IS NULL
-             AND registration_key NOT IN (SELECT value FROM json_each(?))`,
-        )
-        .bind(now, now, now, principal.targetId, declaredKeysJson),
-      this.db
         .prepare("UPDATE registration_tokens SET last_used_at = ? WHERE id = ?")
         .bind(now, principal.tokenId),
       this.db
@@ -354,14 +393,13 @@ export class RegistrationRepository {
     try {
       await this.db.batch(statements);
     } catch (error) {
-      if (error instanceof Error && /malformed JSON/i.test(error.message)) {
-        throw new ApiError(
-          409,
-          "REGISTRATION_CONCURRENT_UPDATE",
-          "Registration 已被并发更新，请以新 revision 重试",
-        );
-      }
-      throw error;
+      return this.rethrowRegistrationError(
+        error,
+        principal,
+        declaration.registrationRevision,
+        documentHash,
+        now,
+      );
     }
     return resultView(
       principal.targetId,
@@ -370,6 +408,144 @@ export class RegistrationRepository {
       retiredSchedules,
       now,
     );
+  }
+
+  private async confirmNoopRegistration(
+    principal: RegistrationPrincipal,
+    registrationRevision: string,
+    documentHash: string,
+    now: number,
+  ): Promise<void> {
+    try {
+      await this.db.batch([
+        this.activeTokenGuard(principal, now),
+        ...this.revisionGuardStatements(
+          principal,
+          registrationRevision,
+          documentHash,
+          now,
+        ),
+        this.db
+          .prepare(
+            `SELECT CASE WHEN EXISTS (
+               SELECT 1 FROM registrations
+               WHERE target_id = ? AND registration_revision = ?
+                 AND document_hash = ?
+             ) THEN 1 ELSE json('') END AS current_guard`,
+          )
+          .bind(principal.targetId, registrationRevision, documentHash),
+        this.db
+          .prepare(
+            "UPDATE registration_tokens SET last_used_at = ? WHERE id = ?",
+          )
+          .bind(now, principal.tokenId),
+      ]);
+    } catch (error) {
+      return this.rethrowRegistrationError(
+        error,
+        principal,
+        registrationRevision,
+        documentHash,
+        now,
+      );
+    }
+  }
+
+  private async rethrowRegistrationError(
+    error: unknown,
+    principal: RegistrationPrincipal,
+    registrationRevision: string,
+    documentHash: string,
+    now: number,
+  ): Promise<never> {
+    if (
+      error instanceof Error &&
+      /MANAGED_SCHEDULE_LIMIT_REACHED/i.test(error.message)
+    ) {
+      throw scheduleLimitReached();
+    }
+    if (error instanceof Error && /malformed JSON/i.test(error.message)) {
+      const historical = await this.db
+        .prepare(
+          `SELECT document_hash FROM registration_revisions
+           WHERE target_id = ? AND registration_revision = ? LIMIT 1`,
+        )
+        .bind(principal.targetId, registrationRevision)
+        .first<{ document_hash: string }>();
+      if (historical && historical.document_hash !== documentHash) {
+        throw revisionConflict();
+      }
+      const token = await this.db
+        .prepare(
+          `SELECT 1 AS active FROM registration_tokens
+           WHERE id = ? AND target_id = ? AND scope = 'registration:write'
+             AND revoked_at IS NULL AND expires_at > ? LIMIT 1`,
+        )
+        .bind(principal.tokenId, principal.targetId, now)
+        .first();
+      if (!token) {
+        throw new DomainError(
+          "unauthenticated",
+          "REGISTRATION_TOKEN_INVALID",
+          "Registration Token 无效、已过期或已撤销",
+        );
+      }
+      throw new DomainError(
+        "conflict",
+        "REGISTRATION_CONCURRENT_UPDATE",
+        "Registration 已被并发更新，请重试",
+      );
+    }
+    throw error;
+  }
+
+  private activeTokenGuard(
+    principal: RegistrationPrincipal,
+    now: number,
+  ): D1PreparedStatement {
+    return this.db
+      .prepare(
+        `SELECT CASE WHEN EXISTS (
+           SELECT 1 FROM registration_tokens
+           WHERE id = ? AND target_id = ? AND scope = 'registration:write'
+             AND revoked_at IS NULL AND expires_at > ?
+         ) THEN 1 ELSE json('') END AS token_guard`,
+      )
+      .bind(principal.tokenId, principal.targetId, now);
+  }
+
+  private revisionGuardStatements(
+    principal: RegistrationPrincipal,
+    registrationRevision: string,
+    documentHash: string,
+    now: number,
+  ): [D1PreparedStatement, D1PreparedStatement] {
+    return [
+      this.db
+        .prepare(
+          `INSERT INTO registration_revisions (
+             target_id, registration_revision, document_hash, first_seen_at,
+             token_id
+           ) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(target_id, registration_revision) DO NOTHING`,
+        )
+        .bind(
+          principal.targetId,
+          registrationRevision,
+          documentHash,
+          now,
+          principal.tokenId,
+        ),
+      this.db
+        .prepare(
+          `SELECT CASE WHEN EXISTS (
+             SELECT 1 FROM registration_revisions
+             WHERE target_id = ? AND registration_revision = ?
+               AND document_hash = ?
+           ) THEN 1 ELSE json('') END AS revision_guard`,
+        )
+        .bind(principal.targetId, registrationRevision, documentHash),
+    ];
   }
 }
 
@@ -389,4 +565,20 @@ function resultView(
     retiredSchedules,
     registeredAt: new Date(registeredAt).toISOString(),
   };
+}
+
+function revisionConflict(): DomainError {
+  return new DomainError(
+    "conflict",
+    "REGISTRATION_REVISION_CONFLICT",
+    "相同 registrationRevision 已用于不同声明",
+  );
+}
+
+function scheduleLimitReached(): DomainError {
+  return new DomainError(
+    "rate_limited",
+    "SCHEDULE_LIMIT_REACHED",
+    "平台最多管理 50 个未退役 Schedule",
+  );
 }

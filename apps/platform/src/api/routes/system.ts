@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { parseOrThrow } from "../http-support";
 import { SystemRepository } from "../../infrastructure/d1/system-repository";
-import { executeIdempotentMutation } from "../../infrastructure/d1/idempotent-mutation";
+import { executeIdempotentMutation } from "../idempotent-mutation";
 import { parseMutationBody } from "../request-body";
 import type { ApiRouter } from "../router";
 

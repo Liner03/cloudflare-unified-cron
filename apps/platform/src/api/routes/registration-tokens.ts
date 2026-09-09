@@ -12,6 +12,12 @@ const createTokenSchema = z
   })
   .strict();
 
+const rotateTokenSchema = z
+  .object({
+    expiresInDays: z.number().int().min(1).max(365).default(90),
+  })
+  .strict();
+
 export function registerRegistrationTokenRoutes(app: ApiRouter): void {
   app.get("/registration-tokens", async (context) => {
     const tokens = await new RegistrationTokenRepository(context.env.DB).list();
@@ -35,6 +41,20 @@ export function registerRegistrationTokenRoutes(app: ApiRouter): void {
     const result = await new RegistrationTokenRepository(context.env.DB).revoke(
       {
         id: context.req.param("id"),
+        actor: context.get("actor"),
+        now: Date.now(),
+      },
+    );
+    return context.json({ data: result });
+  });
+
+  app.post("/registration-tokens/:id/rotate", async (context) => {
+    const body = await parseMutationBody(context.req.raw);
+    const input = parseOrThrow(rotateTokenSchema, body.value);
+    const result = await new RegistrationTokenRepository(context.env.DB).rotate(
+      {
+        id: context.req.param("id"),
+        expiresInDays: input.expiresInDays,
         actor: context.get("actor"),
         now: Date.now(),
       },

@@ -1,7 +1,7 @@
 import { jsonValueSchema, type JsonValue } from "@unified-cron/contracts";
 import { z } from "zod";
 import { parseSnapshot } from "./execution-repository";
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 
 export function serializeExecutionSummary(value: unknown) {
   const row = z
@@ -81,7 +81,11 @@ export async function readExecution(
     .bind(id)
     .first();
   if (!row) {
-    throw new ApiError(404, "EXECUTION_NOT_FOUND", "执行不存在或已清理");
+    throw new DomainError(
+      "not_found",
+      "EXECUTION_NOT_FOUND",
+      "执行不存在或已清理",
+    );
   }
   return executionRowSchema.parse(row);
 }

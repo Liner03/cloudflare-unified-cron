@@ -334,6 +334,8 @@ export class ExecutionRepository {
                 e.retry_deadline_at, e.available_at, e.created_at
          FROM executions e
          JOIN targets t ON t.id = e.target_id AND t.enabled = 1
+         JOIN schedules s ON s.id = e.schedule_id AND s.enabled = 1
+           AND s.managed_by_registration = 1 AND s.retired_at IS NULL
          JOIN platform_state p ON p.id = 1 AND p.dispatch_paused = 0
          WHERE e.status IN ('pending', 'retry_wait') AND e.available_at <= ?
            AND e.attempt_count < e.attempt_limit
@@ -364,6 +366,11 @@ export class ExecutionRepository {
              AND status IN ('pending', 'retry_wait')
              AND available_at <= ? AND attempt_count < attempt_limit
              AND EXISTS (SELECT 1 FROM targets t WHERE t.id = executions.target_id AND t.enabled = 1)
+             AND EXISTS (
+               SELECT 1 FROM schedules s
+               WHERE s.id = executions.schedule_id AND s.enabled = 1
+                 AND s.managed_by_registration = 1 AND s.retired_at IS NULL
+             )
              AND EXISTS (SELECT 1 FROM platform_state p WHERE p.id = 1 AND p.dispatch_paused = 0)
            RETURNING id, schedule_id, target_id, source, scheduled_for,
                      snapshot_json, attempt_count, next_attempt_reason,

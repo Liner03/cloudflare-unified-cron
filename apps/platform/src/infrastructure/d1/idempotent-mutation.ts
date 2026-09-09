@@ -1,7 +1,5 @@
 import type { JsonValue } from "@unified-cron/contracts";
-import type { Context } from "hono";
-import type { ApiVariables } from "../auth/access";
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 
 const IDEMPOTENCY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -15,117 +13,121 @@ export interface MutationPlan {
   changes: JsonValue;
   conflictCode: string;
   conflictMessage: string;
-  conflictStatus?: 409 | 429;
+}
+
+export interface MutationOutcome {
+  responseJson: string;
+  status: 200 | 202;
 }
 
 interface StoredIdempotency {
   request_hash: string;
-  status_code: number;
+  status_code: 200 | 202;
   response_json: string;
 }
 
-export async function executeIdempotentMutation(
-  context: Context<{ Bindings: Env; Variables: ApiVariables }>,
-  rawBody: Uint8Array,
-  createPlan: () => Promise<MutationPlan> | MutationPlan,
-): Promise<Response> {
-  const key = context.req.header("Idempotency-Key");
-  if (!key || !/^[A-Za-z0-9._:-]{8,128}$/.test(key)) {
-    throw new ApiError(
-      422,
-      "IDEMPOTENCY_KEY_REQUIRED",
-      "写操作需要 8..128 字符的 Idempotency-Key",
-    );
-  }
-  const actor = context.get("actor");
-  const scope = `${actor}:${context.req.method}:${new URL(context.req.url).pathname}`;
-  const requestHash = await sha256(rawBody);
-  const stored = await readStored(context.env.DB, scope, key);
-  if (stored) return replay(stored, requestHash);
+/** Persists one audited mutation and its replay response in a D1 transaction. */
+export class IdempotentMutationRepository {
+  constructor(private readonly db: D1Database) {}
 
-  const plan = await createPlan();
-  const now = Date.now();
-  const responseJson = JSON.stringify(plan.response);
-  try {
-    await context.env.DB.batch([
-      context.env.DB.prepare(
-        `INSERT INTO api_idempotency (
-             scope, key, request_hash, status_code, response_json, created_at, expires_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(
-        scope,
-        key,
-        requestHash,
-        plan.status,
-        responseJson,
-        now,
-        now + IDEMPOTENCY_TTL_MS,
-      ),
-      plan.statement,
-      context.env.DB.prepare(
-        "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('') END AS mutation_applied",
-      ),
-      context.env.DB.prepare(
-        `INSERT INTO audit_events (
-             id, actor, action, entity_type, entity_id, changes_json, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(
-        crypto.randomUUID(),
-        actor,
-        plan.action,
-        plan.entityType,
-        plan.entityId,
-        JSON.stringify(plan.changes),
-        now,
-      ),
-    ]);
-  } catch (error) {
-    const raced = await readStored(context.env.DB, scope, key);
-    if (raced) return replay(raced, requestHash);
-    if (isMutationConflict(error)) {
-      throw new ApiError(
-        plan.conflictStatus ?? 409,
-        plan.conflictCode,
-        plan.conflictMessage,
-      );
+  async execute(
+    input: {
+      scope: string;
+      key: string;
+      actor: string;
+      rawBody: Uint8Array;
+      now: number;
+    },
+    createPlan: () => Promise<MutationPlan> | MutationPlan,
+  ): Promise<MutationOutcome> {
+    const requestHash = await sha256(input.rawBody);
+    const stored = await this.readStored(input.scope, input.key, input.now);
+    if (stored) return replay(stored, requestHash);
+
+    const plan = await createPlan();
+    const responseJson = JSON.stringify(plan.response);
+    try {
+      await this.db.batch([
+        this.db
+          .prepare(
+            `INSERT INTO api_idempotency (
+               scope, key, request_hash, status_code, response_json,
+               created_at, expires_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            input.scope,
+            input.key,
+            requestHash,
+            plan.status,
+            responseJson,
+            input.now,
+            input.now + IDEMPOTENCY_TTL_MS,
+          ),
+        plan.statement,
+        this.db.prepare(
+          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('') END AS mutation_applied",
+        ),
+        this.db
+          .prepare(
+            `INSERT INTO audit_events (
+               id, actor, action, entity_type, entity_id, changes_json,
+               created_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            input.actor,
+            plan.action,
+            plan.entityType,
+            plan.entityId,
+            JSON.stringify(plan.changes),
+            input.now,
+          ),
+      ]);
+    } catch (error) {
+      const raced = await this.readStored(input.scope, input.key, input.now);
+      if (raced) return replay(raced, requestHash);
+      if (isMutationConflict(error)) {
+        throw new DomainError(
+          "conflict",
+          plan.conflictCode,
+          plan.conflictMessage,
+        );
+      }
+      throw error;
     }
-    throw error;
+    return { responseJson, status: plan.status };
   }
-  return Response.json(plan.response, {
-    status: plan.status,
-    headers: { "Cache-Control": "no-store" },
-  });
+
+  private readStored(
+    scope: string,
+    key: string,
+    now: number,
+  ): Promise<StoredIdempotency | null> {
+    return this.db
+      .prepare(
+        `SELECT request_hash, status_code, response_json
+         FROM api_idempotency
+         WHERE scope = ? AND key = ? AND expires_at > ?`,
+      )
+      .bind(scope, key, now)
+      .first<StoredIdempotency>();
+  }
 }
 
-async function readStored(
-  db: D1Database,
-  scope: string,
-  key: string,
-): Promise<StoredIdempotency | null> {
-  return db
-    .prepare(
-      `SELECT request_hash, status_code, response_json
-       FROM api_idempotency WHERE scope = ? AND key = ? AND expires_at > ?`,
-    )
-    .bind(scope, key, Date.now())
-    .first<StoredIdempotency>();
-}
-
-function replay(stored: StoredIdempotency, requestHash: string): Response {
+function replay(
+  stored: StoredIdempotency,
+  requestHash: string,
+): MutationOutcome {
   if (stored.request_hash !== requestHash) {
-    throw new ApiError(
-      409,
+    throw new DomainError(
+      "conflict",
       "IDEMPOTENCY_CONFLICT",
       "相同 Idempotency-Key 已用于不同请求体",
     );
   }
-  return new Response(stored.response_json, {
-    status: stored.status_code,
-    headers: {
-      "Content-Type": "application/json; charset=UTF-8",
-      "Cache-Control": "no-store",
-    },
-  });
+  return { responseJson: stored.response_json, status: stored.status_code };
 }
 
 async function sha256(value: Uint8Array): Promise<string> {

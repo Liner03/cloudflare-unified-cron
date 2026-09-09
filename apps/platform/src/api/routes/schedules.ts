@@ -3,7 +3,7 @@ import { ManagedScheduleRepository } from "../../infrastructure/d1/managed-sched
 import { CronCalculator } from "../../infrastructure/cron/cron-calculator";
 import { ApiError } from "../errors";
 import { parseOrThrow } from "../http-support";
-import { executeIdempotentMutation } from "../../infrastructure/d1/idempotent-mutation";
+import { executeIdempotentMutation } from "../idempotent-mutation";
 import { parseMutationBody } from "../request-body";
 import type { ApiRouter } from "../router";
 import { cronPreviewSchema } from "../schemas";
@@ -48,17 +48,6 @@ export function registerScheduleRoutes(app: ApiRouter): void {
       });
     });
   }
-
-  app.post("/schedules/:id/run", async (context) => {
-    const body = await parseMutationBody(context.req.raw);
-    parseOrThrow(z.object({}).strict(), body.value);
-    return executeIdempotentMutation(context, body.raw, () =>
-      new ManagedScheduleRepository(context.env.DB).planRun(
-        context.req.param("id"),
-        Date.now(),
-      ),
-    );
-  });
 
   app.post("/cron/preview", async (context) => {
     const body = await parseMutationBody(context.req.raw);

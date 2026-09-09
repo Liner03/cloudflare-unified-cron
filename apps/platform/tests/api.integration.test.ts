@@ -50,6 +50,7 @@ describe("registered control plane API", () => {
       env.DB.prepare("DELETE FROM executions"),
       env.DB.prepare("DELETE FROM schedules"),
       env.DB.prepare("DELETE FROM registered_actions"),
+      env.DB.prepare("DELETE FROM registration_revisions"),
       env.DB.prepare("DELETE FROM registrations"),
       env.DB.prepare("DELETE FROM registration_tokens"),
       env.DB.prepare("DELETE FROM admin_sessions"),
@@ -122,6 +123,39 @@ describe("registered control plane API", () => {
     });
   });
 
+  it("never accepts different content for a previously seen revision", async () => {
+    const token = await issuedToken();
+    await register(token, baseRegistration);
+    await register(token, {
+      ...baseRegistration,
+      registrationRevision: "build-2",
+      worker: { label: "Second build" },
+    });
+    const conflict = await register(token, {
+      ...baseRegistration,
+      worker: { label: "Reused revision with different content" },
+    });
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      error: { code: "REGISTRATION_REVISION_CONFLICT" },
+    });
+  });
+
+  it("allows an exact historical declaration to be restored", async () => {
+    const token = await issuedToken();
+    await register(token, baseRegistration);
+    await register(token, {
+      ...baseRegistration,
+      registrationRevision: "build-2",
+      worker: { label: "Second build" },
+    });
+    const restored = await register(token, baseRegistration);
+    expect(restored.status).toBe(200);
+    await expect(restored.json()).resolves.toMatchObject({
+      data: { registrationRevision: "build-1", unchanged: false },
+    });
+  });
+
   it("bulk-reconciles the documented maximum without one query per item", async () => {
     const token = await issuedToken();
     const actions = Array.from({ length: 100 }, (_value, index) => ({
@@ -154,6 +188,54 @@ describe("registered control plane API", () => {
     });
     expect(response.status).toBe(200);
     expect(await count("registered_actions")).toBe(100);
+    expect(await count("schedules")).toBe(50);
+  });
+
+  it("enforces the 50 Schedule limit across all targets", async () => {
+    await env.DB.prepare(
+      `INSERT INTO targets (
+         id, label, enabled, manifest_revision, created_at, updated_at
+       ) VALUES ('OTHER', 'Other Worker', 1, 'other-v1', 1, 1)`,
+    ).run();
+    await env.DB.prepare(
+      `WITH RECURSIVE numbers(value) AS (
+         SELECT 1 UNION ALL SELECT value + 1 FROM numbers WHERE value < 50
+       )
+       INSERT INTO schedules (
+         id, name, description, target_id, action, action_version,
+         cron_expression, timezone, enabled, revision, payload_json,
+         retry_policy_json, timeout_ms, misfire_policy, misfire_grace_seconds,
+         next_run_at, created_at, updated_at, registration_key,
+         managed_by_registration, declared_enabled, operator_paused
+       )
+       SELECT 'other-' || value, 'Other ' || value, '', 'OTHER', 'noop', 1,
+              '0 * * * *', 'UTC', 0, 1, '{}',
+              '{"maxAttempts":1,"delaysSeconds":[],"retryOnUnknown":false}',
+              30000, 'coalesce', 300, NULL, 1, 1, 'other-' || value, 1, 0, 0
+       FROM numbers`,
+    ).run();
+    await expect(
+      env.DB.prepare(
+        `INSERT INTO schedules (
+           id, name, description, target_id, action, action_version,
+           cron_expression, timezone, enabled, revision, payload_json,
+           retry_policy_json, timeout_ms, misfire_policy, misfire_grace_seconds,
+           next_run_at, created_at, updated_at, registration_key,
+           managed_by_registration, declared_enabled, operator_paused
+         ) VALUES (
+           'over-limit', 'Over limit', '', 'OTHER', 'noop', 1,
+           '0 * * * *', 'UTC', 0, 1, '{}',
+           '{"maxAttempts":1,"delaysSeconds":[],"retryOnUnknown":false}',
+           30000, 'coalesce', 300, NULL, 1, 1, 'over-limit', 1, 0, 0
+         )`,
+      ).run(),
+    ).rejects.toThrow(/MANAGED_SCHEDULE_LIMIT_REACHED/);
+    const token = await issuedToken();
+    const response = await register(token, baseRegistration);
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "SCHEDULE_LIMIT_REACHED" },
+    });
     expect(await count("schedules")).toBe(50);
   });
 
@@ -211,7 +293,7 @@ describe("registered control plane API", () => {
     });
   });
 
-  it("removes manual Schedule CRUD while retaining controlled Run now", async () => {
+  it("removes manual Schedule CRUD and Schedule Run now", async () => {
     const manualCreate = await adminMutate("/api/v1/schedules", {
       name: "manual",
     });
@@ -224,12 +306,70 @@ describe("registered control plane API", () => {
     ).first<{ id: string }>();
     if (!schedule) throw new Error("registered schedule was not created");
     const run = await adminMutate(`/api/v1/schedules/${schedule.id}/run`, {});
-    expect(run.status).toBe(202);
-    const execution = await env.DB.prepare(
-      "SELECT status FROM executions",
-    ).first<{ status: string }>();
-    expect(execution?.status).toBe("pending");
+    expect(run.status).toBe(404);
     expect(await count("attempts")).toBe(0);
+  });
+
+  it("rotates a Token atomically and accepts only the replacement", async () => {
+    const issued = await issueToken();
+    const original = await issued.json();
+    const originalId = readString(original, "id");
+    const originalToken = readString(original, "token");
+    const rotated = await adminMutate(
+      `/api/v1/registration-tokens/${originalId}/rotate`,
+      { expiresInDays: 30 },
+    );
+    expect(rotated.status).toBe(200);
+    const value = await rotated.json();
+    const replacementId = readString(value, "id");
+    const replacementToken = readString(value, "token");
+    expect(replacementToken).not.toBe(originalToken);
+    const listed = await adminGet("/api/v1/registration-tokens");
+    expect(JSON.stringify(await listed.json())).not.toContain(replacementToken);
+
+    expect((await register(originalToken, baseRegistration)).status).toBe(401);
+    expect((await register(replacementToken, baseRegistration)).status).toBe(
+      200,
+    );
+    const links = await env.DB.prepare(
+      `SELECT id, rotated_from_id, replaced_by_id
+       FROM registration_tokens WHERE id IN (?, ?) ORDER BY id`,
+    )
+      .bind(originalId, replacementId)
+      .all<{
+        id: string;
+        rotated_from_id: string | null;
+        replaced_by_id: string | null;
+      }>();
+    expect(
+      links.results.find((row) => row.id === originalId)?.replaced_by_id,
+    ).toBe(replacementId);
+    expect(
+      links.results.find((row) => row.id === replacementId)?.rotated_from_id,
+    ).toBe(originalId);
+  });
+
+  it("allows only one replacement under concurrent Token rotation", async () => {
+    const issued = await issueToken();
+    const originalId = readString(await issued.json(), "id");
+    const responses = await Promise.all([
+      adminMutate(`/api/v1/registration-tokens/${originalId}/rotate`, {
+        expiresInDays: 30,
+      }),
+      adminMutate(`/api/v1/registration-tokens/${originalId}/rotate`, {
+        expiresInDays: 30,
+      }),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 409,
+    ]);
+    const replacements = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM registration_tokens
+       WHERE rotated_from_id = ? AND revoked_at IS NULL`,
+    )
+      .bind(originalId)
+      .first<{ count: number }>();
+    expect(replacements?.count).toBe(1);
   });
 
   it("rejects revoked machine credentials without affecting Admin Sessions", async () => {
@@ -259,6 +399,31 @@ describe("registered control plane API", () => {
     expect(forbidden.status).toBe(403);
     const token = await issuedToken();
     expect((await register(token, baseRegistration)).status).toBe(200);
+  });
+
+  it("replays audited mutations and rejects key reuse with another body", async () => {
+    const key = `test:${crypto.randomUUID()}`;
+    const first = await adminMutateWithKey(
+      "/api/v1/targets/DATA/disable",
+      {},
+      key,
+    );
+    const replay = await adminMutateWithKey(
+      "/api/v1/targets/DATA/disable",
+      {},
+      key,
+    );
+    expect(first.status).toBe(200);
+    expect(await replay.json()).toEqual(await first.json());
+    const conflict = await adminMutateWithKey(
+      "/api/v1/targets/DATA/disable",
+      { changed: true },
+      key,
+    );
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
   });
 
   it("reports execution and first-attempt success rates with an explicit sample", async () => {
@@ -323,6 +488,20 @@ function adminMutate(
   body: unknown,
   extraHeaders: Record<string, string> = {},
 ): Promise<Response> {
+  return adminMutateWithKey(
+    path,
+    body,
+    `test:${crypto.randomUUID()}`,
+    extraHeaders,
+  );
+}
+
+function adminMutateWithKey(
+  path: string,
+  body: unknown,
+  idempotencyKey: string,
+  extraHeaders: Record<string, string> = {},
+): Promise<Response> {
   return exports.default.fetch(
     new Request(`http://localhost${path}`, {
       method: "POST",
@@ -330,7 +509,7 @@ function adminMutate(
         Cookie: adminCookie,
         Origin: "http://localhost:8787",
         "Content-Type": "application/json",
-        "Idempotency-Key": `test:${crypto.randomUUID()}`,
+        "Idempotency-Key": idempotencyKey,
         ...extraHeaders,
       },
       body: JSON.stringify(body),

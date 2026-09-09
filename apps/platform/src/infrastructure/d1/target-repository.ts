@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TARGETS } from "../../targets.manifest";
 import { RegisteredTargetCatalog } from "./registered-target-catalog";
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 import type { MutationPlan } from "./idempotent-mutation";
 
 const targetStateSchema = z.object({
@@ -29,6 +29,23 @@ export class TargetRepository {
     private readonly db: D1Database,
     private readonly catalog = new RegisteredTargetCatalog(db),
   ) {}
+
+  async requireEnabled(targetId: string): Promise<void> {
+    const state = await this.db
+      .prepare("SELECT enabled FROM targets WHERE id = ? LIMIT 1")
+      .bind(targetId)
+      .first<{ enabled: number }>();
+    if (!state) {
+      throw new DomainError(
+        "invalid",
+        "TARGET_NOT_SYNCED",
+        "Target manifest 尚未同步到 D1",
+      );
+    }
+    if (state.enabled !== 1) {
+      throw new DomainError("conflict", "TARGET_DISABLED", "Target 当前已禁用");
+    }
+  }
 
   async list() {
     const [statesResult, registrationsResult, actions] = await Promise.all([
@@ -84,7 +101,11 @@ export class TargetRepository {
   async detail(targetId: string) {
     const target = TARGETS.find((value) => value.id === targetId);
     if (!target) {
-      throw new ApiError(404, "TARGET_NOT_FOUND", "Target 不在部署白名单中");
+      throw new DomainError(
+        "not_found",
+        "TARGET_NOT_FOUND",
+        "Target 不在部署白名单中",
+      );
     }
     const [state, schedules, registrationValue, actions] = await Promise.all([
       this.db
@@ -175,7 +196,11 @@ export class TargetRepository {
   ): MutationPlan {
     const target = TARGETS.find((value) => value.id === targetId);
     if (!target) {
-      throw new ApiError(404, "TARGET_NOT_FOUND", "Target 不在部署白名单中");
+      throw new DomainError(
+        "not_found",
+        "TARGET_NOT_FOUND",
+        "Target 不在部署白名单中",
+      );
     }
     const enabled = operation === "enable";
     return {

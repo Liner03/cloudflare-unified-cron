@@ -109,6 +109,21 @@ describe("deployment manifest", () => {
     });
     expect(offenders).toEqual([]);
   });
+
+  it("keeps HTTP transport dependencies out of D1 repositories", () => {
+    const d1Root = fileURLToPath(
+      new URL("../src/infrastructure/d1", import.meta.url),
+    );
+    const offenders = sourceFiles(d1Root).filter((path) => {
+      const source = readFileSync(path, "utf8");
+      return (
+        /from ["']hono["']/.test(source) ||
+        /from ["']\.\.\/\.\.\/api\//.test(source) ||
+        /\b(?:new )?Response(?:\.json)?\b/.test(source)
+      );
+    });
+    expect(offenders).toEqual([]);
+  });
 });
 
 function sourceFiles(directory: string): string[] {

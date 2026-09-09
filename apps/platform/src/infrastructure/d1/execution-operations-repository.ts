@@ -1,4 +1,4 @@
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 import type { MutationPlan } from "./idempotent-mutation";
 import {
   parseJson,
@@ -9,6 +9,8 @@ import {
   serializeExecutionSummary,
 } from "./execution-view";
 import { RegisteredTargetCatalog } from "./registered-target-catalog";
+import { TargetRepository } from "./target-repository";
+import { ManagedScheduleRepository } from "./managed-schedule-repository";
 
 export interface PageCursor {
   createdAt: number;
@@ -20,6 +22,8 @@ export class ExecutionOperationsRepository {
   constructor(
     private readonly db: D1Database,
     private readonly targets = new RegisteredTargetCatalog(db),
+    private readonly targetState = new TargetRepository(db, targets),
+    private readonly schedules = new ManagedScheduleRepository(db),
   ) {}
 
   async list(input: {
@@ -124,8 +128,8 @@ export class ExecutionOperationsRepository {
   }): Promise<MutationPlan> {
     const execution = await readExecution(this.db, input.id);
     if (!isRetryableStatus(execution.status)) {
-      throw new ApiError(
-        409,
+      throw new DomainError(
+        "conflict",
         "EXECUTION_NOT_RETRYABLE",
         "只有 failed 或 unknown 执行可人工重试",
       );
@@ -137,37 +141,40 @@ export class ExecutionOperationsRepository {
       snapshot.actionVersion,
     );
     if (!capability) {
-      throw new ApiError(
-        409,
+      throw new DomainError(
+        "conflict",
         "TARGET_CAPABILITY_REMOVED",
         "目标 Action 或版本已移除",
       );
     }
     if (!snapshot.targetActionIdempotent || !capability.action.idempotent) {
-      throw new ApiError(
-        409,
+      throw new DomainError(
+        "conflict",
         "EXECUTION_RETRY_REQUIRES_IDEMPOTENCY",
         "Retry 仅允许快照和当前 Target 都声明幂等的执行；请核实结果后使用 Run again",
       );
     }
-    await this.requireTargetEnabled(execution.target_id);
+    await Promise.all([
+      this.targetState.requireEnabled(execution.target_id),
+      this.schedules.requireDispatchEligible(execution.schedule_id),
+    ]);
     if (input.now - execution.created_at > 7 * 24 * 60 * 60 * 1000) {
-      throw new ApiError(
-        409,
+      throw new DomainError(
+        "conflict",
         "OPERATOR_RETRY_WINDOW_EXPIRED",
         "人工重试的 7 天窗口已结束",
       );
     }
     if (execution.attempt_limit >= 10) {
-      throw new ApiError(
-        409,
+      throw new DomainError(
+        "conflict",
         "ATTEMPT_HARD_LIMIT",
         "Attempt 总数已达到 10 次上限",
       );
     }
     if (execution.status === "unknown" && !input.confirmRisk) {
-      throw new ApiError(
-        422,
+      throw new DomainError(
+        "invalid",
         "RISK_CONFIRMATION_REQUIRED",
         "必须确认原业务可能已经执行的风险",
       );
@@ -223,16 +230,16 @@ export class ExecutionOperationsRepository {
     now: number;
   }): Promise<MutationPlan> {
     if (!input.confirmRisk) {
-      throw new ApiError(
-        422,
+      throw new DomainError(
+        "invalid",
         "RISK_CONFIRMATION_REQUIRED",
         "新建运行会使用新的幂等键，必须确认风险",
       );
     }
     const parent = await readExecution(this.db, input.id);
     if (!isRerunnableStatus(parent.status)) {
-      throw new ApiError(
-        409,
+      throw new DomainError(
+        "conflict",
         "EXECUTION_NOT_RERUNNABLE",
         "活跃或 unknown 执行不能直接 Run again",
       );
@@ -244,13 +251,16 @@ export class ExecutionOperationsRepository {
       snapshot.actionVersion,
     );
     if (!capability) {
-      throw new ApiError(
-        409,
+      throw new DomainError(
+        "conflict",
         "TARGET_CAPABILITY_REMOVED",
         "目标 Action 或版本已移除",
       );
     }
-    await this.requireTargetEnabled(parent.target_id);
+    await Promise.all([
+      this.targetState.requireEnabled(parent.target_id),
+      this.schedules.requireDispatchEligible(parent.schedule_id),
+    ]);
     const executionId = crypto.randomUUID();
     return {
       statement: this.db
@@ -433,23 +443,6 @@ export class ExecutionOperationsRepository {
       })),
       meta: { nextCursor },
     };
-  }
-
-  private async requireTargetEnabled(targetId: string): Promise<void> {
-    const state = await this.db
-      .prepare("SELECT enabled FROM targets WHERE id = ? LIMIT 1")
-      .bind(targetId)
-      .first<{ enabled: number }>();
-    if (!state) {
-      throw new ApiError(
-        422,
-        "TARGET_NOT_SYNCED",
-        "Target manifest 尚未同步到 D1",
-      );
-    }
-    if (state.enabled !== 1) {
-      throw new ApiError(409, "TARGET_DISABLED", "Target 当前已禁用");
-    }
   }
 }
 

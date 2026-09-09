@@ -6,15 +6,11 @@ import {
   type JsonValue,
 } from "@unified-cron/contracts";
 import { z } from "zod";
-import type { ScheduleSnapshot } from "../../domain/model";
-import { ApiError } from "../../api/errors";
+import { DomainError } from "../../domain/error";
 import { serializeExecutionSummary } from "./execution-view";
 import type { MutationPlan } from "./idempotent-mutation";
 import { CronCalculator } from "../cron/cron-calculator";
-import {
-  RegisteredTargetCatalog,
-  type RegisteredTargetCapability,
-} from "./registered-target-catalog";
+import { RegisteredTargetCatalog } from "./registered-target-catalog";
 
 const scheduleRowSchema = z.object({
   id: z.string(),
@@ -139,6 +135,17 @@ export class ManagedScheduleRepository {
     };
   }
 
+  async requireDispatchEligible(id: string): Promise<void> {
+    const row = await this.requireManaged(id);
+    if (row.enabled !== 1) {
+      throw new DomainError(
+        "conflict",
+        "SCHEDULE_NOT_DISPATCH_ELIGIBLE",
+        "Schedule 当前被 Worker 声明停用或由管理员暂停",
+      );
+    }
+  }
+
   async planPause(
     id: string,
     revision: number,
@@ -212,57 +219,6 @@ export class ManagedScheduleRepository {
     };
   }
 
-  async planRun(id: string, now: number): Promise<MutationPlan> {
-    const row = await this.requireManaged(id);
-    const input = rowToInput(row);
-    const capability = await this.validate(input, now);
-    await this.requireTargetEnabled(row.target_id);
-    const executionId = crypto.randomUUID();
-    const snapshot = buildSnapshot(input, row.revision, capability);
-    snapshot.scheduleId = row.id;
-    return {
-      statement: this.db
-        .prepare(
-          `INSERT INTO executions (
-             id, schedule_id, target_id, source, scheduled_for, dedupe_key,
-             schedule_revision, snapshot_json, status, available_at,
-             next_attempt_reason, attempt_limit, max_auto_attempts,
-             retry_deadline_at, created_at, updated_at
-           )
-           SELECT ?, id, target_id, 'manual', NULL, ?, revision, ?, 'pending', ?,
-                  'initial', ?, ?, ?, ?, ?
-           FROM schedules
-           WHERE id = ? AND revision = ? AND managed_by_registration = 1
-             AND retired_at IS NULL
-             AND NOT EXISTS (
-               SELECT 1 FROM executions active WHERE active.schedule_id = schedules.id
-                 AND active.status IN ('pending', 'running', 'retry_wait', 'unknown')
-             )`,
-        )
-        .bind(
-          executionId,
-          `manual:${executionId}`,
-          JSON.stringify(snapshot),
-          now,
-          input.retryPolicy.maxAttempts,
-          input.retryPolicy.maxAttempts,
-          now + 24 * 60 * 60 * 1000,
-          now,
-          now,
-          row.id,
-          row.revision,
-        ),
-      response: { data: { executionId, status: "pending" } },
-      status: 202,
-      action: "execution.run_now_requested",
-      entityType: "execution",
-      entityId: executionId,
-      changes: { scheduleId: row.id, source: "manual" },
-      conflictCode: "SCHEDULE_RUN_CONFLICT",
-      conflictMessage: "计划 revision 已变化或已有尚未完成的执行，请刷新后重试",
-    };
-  }
-
   private async requireManaged(id: string): Promise<ScheduleRow> {
     const value = await this.db
       .prepare(
@@ -276,18 +232,20 @@ export class ManagedScheduleRepository {
       )
       .bind(id)
       .first();
-    if (!value) throw new ApiError(404, "SCHEDULE_NOT_FOUND", "计划不存在");
+    if (!value) {
+      throw new DomainError("not_found", "SCHEDULE_NOT_FOUND", "计划不存在");
+    }
     const row = scheduleRowSchema.parse(value);
     if (row.managed_by_registration !== 1 || row.retired_at !== null) {
-      throw new ApiError(404, "SCHEDULE_NOT_FOUND", "计划不存在");
+      throw new DomainError("not_found", "SCHEDULE_NOT_FOUND", "计划不存在");
     }
     return row;
   }
 
   private async validate(input: ScheduleInput, now: number) {
     if (jsonByteLength(input.payload) > LIMITS.payloadBytes) {
-      throw new ApiError(
-        422,
+      throw new DomainError(
+        "invalid",
         "PAYLOAD_TOO_LARGE",
         "Schedule payload 不得超过 16 KiB",
       );
@@ -298,22 +256,22 @@ export class ManagedScheduleRepository {
       input.actionVersion,
     );
     if (!capability) {
-      throw new ApiError(
-        422,
+      throw new DomainError(
+        "invalid",
         "TARGET_ACTION_NOT_DECLARED",
         "Target、Action 或版本不在最新 Registration 中",
       );
     }
     if (input.retryPolicy.maxAttempts > 1 && !capability.action.idempotent) {
-      throw new ApiError(
-        422,
+      throw new DomainError(
+        "invalid",
         "NON_IDEMPOTENT_RETRY_FORBIDDEN",
         "非幂等 Action 不允许自动重试",
       );
     }
     if (input.retryPolicy.retryOnUnknown && !capability.action.idempotent) {
-      throw new ApiError(
-        422,
+      throw new DomainError(
+        "invalid",
         "NON_IDEMPOTENT_UNKNOWN_RETRY_FORBIDDEN",
         "非幂等 Action 不允许重试未知结果",
       );
@@ -322,23 +280,6 @@ export class ManagedScheduleRepository {
       ...capability,
       nextRunAt: this.cron.nextAfter(input.cronExpression, input.timezone, now),
     };
-  }
-
-  private async requireTargetEnabled(targetId: string): Promise<void> {
-    const state = await this.db
-      .prepare("SELECT enabled FROM targets WHERE id = ? LIMIT 1")
-      .bind(targetId)
-      .first<{ enabled: number }>();
-    if (!state) {
-      throw new ApiError(
-        422,
-        "TARGET_NOT_SYNCED",
-        "Target manifest 尚未同步到 D1",
-      );
-    }
-    if (state.enabled !== 1) {
-      throw new ApiError(409, "TARGET_DISABLED", "Target 当前已禁用");
-    }
   }
 }
 
@@ -356,27 +297,6 @@ function rowToInput(row: ScheduleRow): ScheduleInput {
     timeoutMs: row.timeout_ms,
     misfirePolicy: row.misfire_policy,
     misfireGraceSeconds: row.misfire_grace_seconds,
-  };
-}
-
-function buildSnapshot(
-  input: ScheduleInput,
-  revision: number,
-  capability: RegisteredTargetCapability,
-): ScheduleSnapshot {
-  return {
-    scheduleId: "",
-    scheduleRevision: revision,
-    targetId: input.targetId,
-    action: input.action,
-    actionVersion: input.actionVersion,
-    targetManifestRevision: capability.target.manifestRevision,
-    targetActionIdempotent: capability.action.idempotent,
-    payload: input.payload,
-    retryPolicy: input.retryPolicy,
-    timeoutMs: input.timeoutMs,
-    cronExpression: input.cronExpression,
-    timezone: input.timezone,
   };
 }
 
