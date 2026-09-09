@@ -1,8 +1,7 @@
 import { jsonValueSchema, type JsonValue } from "@unified-cron/contracts";
 import { z } from "zod";
-import { parseSnapshot } from "../infrastructure/d1/execution-repository";
-import { ApiError } from "./errors";
-import { toIso } from "./http-support";
+import { parseSnapshot } from "./execution-repository";
+import { ApiError } from "../../api/errors";
 
 export function serializeExecutionSummary(value: unknown) {
   const row = z
@@ -155,4 +154,8 @@ export function parseSnapshotJson(value: string) {
 
 export function parseJson(value: string): JsonValue {
   return jsonValueSchema.parse(JSON.parse(value));
+}
+
+function toIso(value: number | null): string | null {
+  return value === null ? null : new Date(value).toISOString();
 }

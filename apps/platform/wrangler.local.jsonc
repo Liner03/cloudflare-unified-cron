@@ -12,6 +12,7 @@
       "migrations_dir": "migrations",
     },
   ],
+  "secrets": { "required": ["ADMIN_PASSWORD_HASH"] },
   "services": [
     {
       "binding": "CRON_DATA",
@@ -21,9 +22,7 @@
   ],
   "vars": {
     "APP_ENV": "development",
-    "AUTH_MODE": "local",
-    "ACCESS_TEAM_DOMAIN": "https://local.cloudflareaccess.com",
-    "ACCESS_AUD": "local",
+    "ADMIN_USERNAME": "admin",
     "PUBLIC_ORIGIN": "http://127.0.0.1:5173",
     "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000001",
     "BUILD_VERSION": "local",

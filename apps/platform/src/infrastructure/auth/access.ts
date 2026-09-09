@@ -1,95 +1,126 @@
-import {
-  createRemoteJWKSet,
-  jwtVerify,
-  type JWTPayload,
-  type JWTVerifyGetKey,
-} from "jose";
 import type { MiddlewareHandler } from "hono";
 import { ApiError } from "../../api/errors";
+import { AdminSessionRepository } from "../d1/admin-session-repository";
+import { timingSafeEqual } from "../security/crypto";
 
-const jwksByUrl = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
-const MAX_JWKS_CONFIGS = 4;
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const MIN_PBKDF2_ITERATIONS = 600_000;
 
 export interface ApiVariables {
   actor: string;
   requestId: string;
 }
 
+export interface CreatedAdminSession {
+  cookie: string;
+  expiresAt: number;
+}
+
 export const authenticate: MiddlewareHandler<{
   Bindings: Env;
   Variables: ApiVariables;
 }> = async (context, next) => {
-  const requestId = crypto.randomUUID();
-  context.set("requestId", requestId);
-  const authMode: string = context.env.AUTH_MODE;
-  const appEnv: string = context.env.APP_ENV;
-
-  if (authMode === "local" && appEnv !== "production") {
-    context.set("actor", "local-admin");
-    await next();
-    return;
+  const actor = await readAdminActor(context.req.raw, context.env);
+  if (actor === null) {
+    throw new ApiError(401, "AUTH_REQUIRED", "需要管理员登录");
   }
-  if (authMode !== "access") {
-    throw new ApiError(503, "AUTH_CONFIGURATION_INVALID", "生产认证配置不完整");
-  }
-
-  const token = context.req.header("Cf-Access-Jwt-Assertion");
-  if (!token)
-    throw new ApiError(401, "AUTH_REQUIRED", "需要 Cloudflare Access 登录");
-  const teamDomain = normalizeTeamDomain(context.env.ACCESS_TEAM_DOMAIN);
-  const jwksUrl = `${teamDomain}/cdn-cgi/access/certs`;
-  let jwks = jwksByUrl.get(jwksUrl);
-  if (!jwks) {
-    if (jwksByUrl.size >= MAX_JWKS_CONFIGS) jwksByUrl.clear();
-    jwks = createRemoteJWKSet(new URL(jwksUrl));
-    jwksByUrl.set(jwksUrl, jwks);
-  }
-  const actor = await verifyAccessIdentity(
-    token,
-    jwks,
-    teamDomain,
-    context.env.ACCESS_AUD,
-  );
   context.set("actor", actor);
   await next();
 };
 
-export async function verifyAccessIdentity(
-  token: string,
-  getKey: JWTVerifyGetKey,
-  issuer: string,
-  audience: string,
-): Promise<string> {
-  let payload: JWTPayload;
-  try {
-    ({ payload } = await jwtVerify(token, getKey, { issuer, audience }));
-  } catch {
-    throw new ApiError(401, "AUTH_TOKEN_INVALID", "Access 会话无效或已过期");
+export async function readAdminActor(
+  request: Request,
+  env: Env,
+): Promise<string | null> {
+  const rawToken = readCookie(request.headers.get("Cookie"), cookieName(env));
+  if (rawToken === null || !/^ucas_[A-Za-z0-9_-]{43}$/.test(rawToken)) {
+    return null;
   }
-  const actor =
-    typeof payload.email === "string"
-      ? payload.email
-      : typeof payload.sub === "string"
-        ? payload.sub
-        : null;
-  if (!actor) {
-    throw new ApiError(
-      401,
-      "AUTH_IDENTITY_MISSING",
-      "Access Token 缺少可信身份",
-    );
+  return new AdminSessionRepository(env.DB).findActor(rawToken, Date.now());
+}
+
+export async function verifyConfiguredPassword(
+  suppliedPassword: string,
+  encodedHash: string,
+): Promise<boolean> {
+  const parts = encodedHash.split("$");
+  if (parts.length !== 4 || parts[0] !== "pbkdf2-sha256") {
+    throw invalidAuthConfiguration();
   }
-  return actor;
+  const iterations = Number(parts[1]);
+  const salt = decodeBase64Url(parts[2] ?? "");
+  const expected = decodeBase64Url(parts[3] ?? "");
+  if (
+    !Number.isInteger(iterations) ||
+    iterations < MIN_PBKDF2_ITERATIONS ||
+    iterations > 2_000_000 ||
+    salt.byteLength < 16 ||
+    expected.byteLength !== 32
+  ) {
+    throw invalidAuthConfiguration();
+  }
+  const passwordKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(suppliedPassword),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const saltBuffer = new Uint8Array(salt).buffer;
+  const derived = new Uint8Array(
+    await crypto.subtle.deriveBits(
+      { name: "PBKDF2", hash: "SHA-256", salt: saltBuffer, iterations },
+      passwordKey,
+      256,
+    ),
+  );
+  return timingSafeEqual(derived.buffer, new Uint8Array(expected).buffer);
+}
+
+export async function createAdminSession(
+  env: Env,
+  username: string,
+): Promise<CreatedAdminSession> {
+  const now = Date.now();
+  const { token, expiresAt } = await new AdminSessionRepository(env.DB).create(
+    username,
+    now,
+  );
+  return {
+    cookie: serializeSessionCookie(
+      env,
+      token,
+      Math.floor(SESSION_TTL_MS / 1000),
+    ),
+    expiresAt,
+  };
+}
+
+export async function deleteAdminSession(
+  request: Request,
+  env: Env,
+): Promise<void> {
+  const token = readCookie(request.headers.get("Cookie"), cookieName(env));
+  if (token !== null) {
+    await new AdminSessionRepository(env.DB).revoke(token, Date.now());
+  }
+}
+
+export function clearAdminSessionCookie(env: Env): string {
+  return serializeSessionCookie(env, "", 0);
 }
 
 export function enforceMutationRequest(
   request: Request,
   publicOrigin: string,
 ): void {
-  const origin = request.headers.get("Origin");
-  if (origin !== publicOrigin) {
+  if (request.headers.get("Origin") !== publicOrigin) {
     throw new ApiError(403, "ORIGIN_FORBIDDEN", "请求来源不被允许");
   }
+  enforceJsonRequest(request);
+}
+
+export function enforceJsonRequest(request: Request): void {
   const contentType = request.headers
     .get("Content-Type")
     ?.split(";", 1)[0]
@@ -100,23 +131,48 @@ export function enforceMutationRequest(
   }
 }
 
-function normalizeTeamDomain(value: string): string {
-  let url: URL;
+function invalidAuthConfiguration(): ApiError {
+  return new ApiError(
+    503,
+    "AUTH_CONFIGURATION_INVALID",
+    "管理员密码哈希配置无效",
+  );
+}
+
+function cookieName(env: Env): string {
+  return String(env.APP_ENV) === "production"
+    ? "__Host-ucp_session"
+    : "ucp_session";
+}
+
+function serializeSessionCookie(
+  env: Env,
+  value: string,
+  maxAgeSeconds: number,
+): string {
+  const secure = String(env.APP_ENV) === "production" ? "; Secure" : "";
+  return `${cookieName(env)}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
+function readCookie(header: string | null, name: string): string | null {
+  if (header === null) return null;
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+    return part.slice(separator + 1).trim();
+  }
+  return null;
+}
+
+function decodeBase64Url(value: string): Uint8Array {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return new Uint8Array();
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
   try {
-    url = new URL(value);
+    const binary = atob(
+      value.replaceAll("-", "+").replaceAll("_", "/") + padding,
+    );
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
   } catch {
-    throw new ApiError(
-      503,
-      "AUTH_CONFIGURATION_INVALID",
-      "Access team domain 无效",
-    );
+    return new Uint8Array();
   }
-  if (url.protocol !== "https:" || url.pathname !== "/") {
-    throw new ApiError(
-      503,
-      "AUTH_CONFIGURATION_INVALID",
-      "Access team domain 必须是 HTTPS origin",
-    );
-  }
-  return url.origin;
 }

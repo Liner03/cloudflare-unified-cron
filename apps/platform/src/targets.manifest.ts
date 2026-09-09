@@ -9,24 +9,6 @@ export const TARGETS = [
     entrypoint: "CronEntrypoint",
     protocolVersion: 1,
     manifestRevision: "data-v1",
-    actions: [
-      {
-        name: "healthCheck",
-        version: 1,
-        label: "健康检查",
-        description: "无副作用检查示例 Worker",
-        idempotent: true,
-        examplePayload: {},
-      },
-      {
-        name: "syncUsers",
-        version: 1,
-        label: "同步用户",
-        description: "展示业务侧持久化幂等的示例 Action",
-        idempotent: true,
-        examplePayload: { source: "crm" },
-      },
-    ],
   },
 ] satisfies TargetManifest[];
 
@@ -34,22 +16,4 @@ export function getTargetManifest(
   targetId: string,
 ): TargetManifest | undefined {
   return TARGETS.find((target) => target.id === targetId);
-}
-
-export interface TargetCapability {
-  target: TargetManifest;
-  action: TargetManifest["actions"][number];
-}
-
-export function resolveTargetCapability(
-  targetId: string,
-  actionName: string,
-  actionVersion: number,
-): TargetCapability | undefined {
-  const target = getTargetManifest(targetId);
-  const action = target?.actions.find(
-    (candidate) =>
-      candidate.name === actionName && candidate.version === actionVersion,
-  );
-  return target && action ? { target, action } : undefined;
 }

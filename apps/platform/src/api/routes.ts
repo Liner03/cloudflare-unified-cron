@@ -5,6 +5,10 @@ import { registerOverviewRoutes } from "./routes/overview";
 import { registerScheduleRoutes } from "./routes/schedules";
 import { registerSystemRoutes } from "./routes/system";
 import { registerTargetRoutes } from "./routes/targets";
+import { registerAuthRoutes } from "./routes/auth";
+import { registerRegistrationTokenRoutes } from "./routes/registration-tokens";
+import { registerWorkerRegistrationRoute } from "./routes/registration";
+import { registerSuccessRateRoutes } from "./routes/success-rates";
 import {
   authenticate,
   enforceMutationRequest,
@@ -12,11 +16,8 @@ import {
 
 const app = createApiRouter();
 
-app.use("*", authenticate);
 app.use("*", async (context, next) => {
-  if (!["GET", "HEAD", "OPTIONS"].includes(context.req.method)) {
-    enforceMutationRequest(context.req.raw, context.env.PUBLIC_ORIGIN);
-  }
+  context.set("requestId", crypto.randomUUID());
   await next();
   context.res.headers.set("Cache-Control", "no-store");
   context.res.headers.set("X-Content-Type-Options", "nosniff");
@@ -31,11 +32,24 @@ app.onError((error, context) =>
   errorResponse(error, context.get("requestId") ?? crypto.randomUUID()),
 );
 
+registerAuthRoutes(app);
+registerWorkerRegistrationRoute(app);
+
+app.use("*", authenticate);
+app.use("*", async (context, next) => {
+  if (!["GET", "HEAD", "OPTIONS"].includes(context.req.method)) {
+    enforceMutationRequest(context.req.raw, context.env.PUBLIC_ORIGIN);
+  }
+  await next();
+});
+
 registerOverviewRoutes(app);
 registerScheduleRoutes(app);
 registerTargetRoutes(app);
 registerExecutionRoutes(app);
 registerSystemRoutes(app);
+registerRegistrationTokenRoutes(app);
+registerSuccessRateRoutes(app);
 
 app.all("*", () => {
   throw new ApiError(404, "NOT_FOUND", "API endpoint not found");

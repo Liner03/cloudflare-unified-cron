@@ -7,7 +7,7 @@ import {
   type ScheduleSnapshot,
 } from "../../domain/model";
 import { CronCalculator } from "../cron/cron-calculator";
-import { resolveTargetCapability } from "../../targets.manifest";
+import { RegisteredTargetCatalog } from "./registered-target-catalog";
 
 const AUTOMATIC_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LEASE_MS = 90_000;
@@ -84,6 +84,7 @@ export class ExecutionRepository {
   constructor(
     private readonly db: D1Database,
     private readonly cron: CronCalculator,
+    private readonly targets = new RegisteredTargetCatalog(db),
   ) {}
 
   async beginTick(input: {
@@ -167,12 +168,16 @@ export class ExecutionRepository {
   async listDue(nowMs: number, limit: number): Promise<DueScheduleRow[]> {
     const result = await this.db
       .prepare(
-        `SELECT id, revision, next_run_at, cron_expression, timezone,
-                target_id, action, action_version, payload_json,
-                retry_policy_json, timeout_ms, misfire_policy, misfire_grace_seconds
-         FROM schedules
-         WHERE enabled = 1 AND archived_at IS NULL AND next_run_at <= ?
-         ORDER BY next_run_at, id
+        `SELECT s.id, s.revision, s.next_run_at, s.cron_expression, s.timezone,
+                s.target_id, s.action, s.action_version, s.payload_json,
+                s.retry_policy_json, s.timeout_ms, s.misfire_policy,
+                s.misfire_grace_seconds
+         FROM schedules s
+         JOIN targets t ON t.id = s.target_id AND t.enabled = 1
+         WHERE s.enabled = 1 AND s.managed_by_registration = 1
+           AND s.retired_at IS NULL AND s.archived_at IS NULL
+           AND s.next_run_at <= ?
+         ORDER BY s.next_run_at, s.id
          LIMIT ?`,
       )
       .bind(nowMs, limit)
@@ -181,7 +186,7 @@ export class ExecutionRepository {
   }
 
   async materializeDue(row: DueScheduleRow, nowMs: number): Promise<boolean> {
-    const capability = resolveTargetCapability(
+    const capability = await this.targets.findCapability(
       row.target_id,
       row.action,
       row.action_version,
@@ -195,7 +200,6 @@ export class ExecutionRepository {
       return false;
     }
     const { target, action } = capability;
-
     const retryPolicy = retryPolicySchema.parse(
       JSON.parse(row.retry_policy_json),
     );
@@ -479,15 +483,15 @@ export class ExecutionRepository {
     let recovered = 0;
     for (const value of z.array(expiredLeaseSchema).parse(rows.results)) {
       const snapshot = parseSnapshot(value.snapshot_json);
-      const current = resolveTargetCapability(
+      const current = await this.targets.findCapability(
         value.target_id,
         snapshot.action,
         snapshot.actionVersion,
-      )?.action;
+      );
       const retry = canAutomaticallyRetry({
         policy: snapshot.retryPolicy,
         snapshotIdempotent: snapshot.targetActionIdempotent,
-        currentIdempotent: current?.idempotent === true,
+        currentIdempotent: current?.action.idempotent === true,
         completedAttemptNumber: value.attempt_count,
         retryable: false,
         outcomeUnknown: true,
@@ -568,6 +572,24 @@ export class ExecutionRepository {
            )`,
         )
         .bind(nowMs),
+      this.db
+        .prepare(
+          `DELETE FROM admin_sessions WHERE token_hash IN (
+             SELECT token_hash FROM admin_sessions
+             WHERE expires_at <= ? ORDER BY expires_at LIMIT 100
+           )`,
+        )
+        .bind(nowMs),
+      this.db
+        .prepare(
+          `DELETE FROM admin_login_limits WHERE key_hash IN (
+             SELECT key_hash FROM admin_login_limits
+             WHERE window_started_at <= ?
+               AND (blocked_until IS NULL OR blocked_until <= ?)
+             ORDER BY window_started_at LIMIT 100
+           )`,
+        )
+        .bind(nowMs - 24 * 60 * 60 * 1000, nowMs),
     ]);
     return {
       executions: results[0]?.meta.changes ?? 0,

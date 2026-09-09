@@ -1,0 +1,2 @@
+# Copy to .dev.vars and replace this value with a generated PBKDF2 hash.
+ADMIN_PASSWORD_HASH=REPLACE_WITH_PBKDF2_SHA256_HASH

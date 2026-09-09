@@ -22,6 +22,9 @@ describe("ExecutionRepository on D1", () => {
       env.DB.prepare("DELETE FROM attempts"),
       env.DB.prepare("DELETE FROM executions"),
       env.DB.prepare("DELETE FROM schedules"),
+      env.DB.prepare("DELETE FROM registered_actions"),
+      env.DB.prepare("DELETE FROM registrations"),
+      env.DB.prepare("DELETE FROM registration_tokens"),
       env.DB.prepare("DELETE FROM targets"),
       env.DB.prepare(
         "UPDATE platform_state SET dispatch_paused = 0, last_tick_id = NULL, updated_at = 0 WHERE id = 1",
@@ -34,16 +37,25 @@ describe("ExecutionRepository on D1", () => {
       .bind(now, now)
       .run();
     await env.DB.prepare(
+      `INSERT INTO registered_actions (
+         target_id, name, version, label, description, idempotent,
+         example_payload_json, created_at, updated_at
+       ) VALUES ('DATA', 'healthCheck', 1, 'Health check', '', 1, '{}', ?, ?)`,
+    )
+      .bind(now, now)
+      .run();
+    await env.DB.prepare(
       `INSERT INTO schedules (
          id, name, description, target_id, action, action_version,
          cron_expression, timezone, enabled, revision, payload_json,
          retry_policy_json, timeout_ms, misfire_policy, misfire_grace_seconds,
-         next_run_at, created_at, updated_at
+         next_run_at, created_at, updated_at, registration_key,
+         managed_by_registration, declared_enabled
        ) VALUES (
          'schedule-1', 'Schedule', '', 'DATA', 'healthCheck', 1,
          '* * * * *', 'UTC', 1, 1, '{}',
          '{"maxAttempts":1,"delaysSeconds":[],"retryOnUnknown":false}',
-         30000, 'coalesce', 300, ?, ?, ?
+         30000, 'coalesce', 300, ?, ?, ?, 'schedule-1', 1, 1
        )`,
     )
       .bind(now - 60_000, now, now)

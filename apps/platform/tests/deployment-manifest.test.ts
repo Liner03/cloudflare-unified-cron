@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { TARGETS } from "../src/targets.manifest";
@@ -98,4 +99,25 @@ describe("deployment manifest", () => {
       "wrangler d1 migrations apply BUSINESS_DB --remote --config wrangler.jsonc",
     );
   });
+
+  it("keeps D1 SQL behind repository interfaces", () => {
+    const sourceRoot = fileURLToPath(new URL("../src", import.meta.url));
+    const offenders = sourceFiles(sourceRoot).filter((path) => {
+      if (path.includes("/infrastructure/d1/")) return false;
+      const source = readFileSync(path, "utf8");
+      return source.includes(".prepare(") || source.includes(".batch(");
+    });
+    expect(offenders).toEqual([]);
+  });
 });
+
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${directory}/${entry.name}`;
+    return entry.isDirectory()
+      ? sourceFiles(path)
+      : entry.isFile() && path.endsWith(".ts")
+        ? [path]
+        : [];
+  });
+}

@@ -1,7 +1,7 @@
-import { LIMITS, type JsonValue } from "@unified-cron/contracts";
+import type { JsonValue } from "@unified-cron/contracts";
 import type { Context } from "hono";
-import type { ApiVariables } from "../infrastructure/auth/access";
-import { ApiError } from "./errors";
+import type { ApiVariables } from "../auth/access";
+import { ApiError } from "../../api/errors";
 
 const IDEMPOTENCY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -22,42 +22,6 @@ interface StoredIdempotency {
   request_hash: string;
   status_code: number;
   response_json: string;
-}
-
-export async function parseMutationBody(request: Request): Promise<{
-  raw: Uint8Array;
-  value: unknown;
-}> {
-  const declared = Number(request.headers.get("Content-Length"));
-  if (Number.isFinite(declared) && declared > LIMITS.requestBodyBytes) {
-    throw new ApiError(413, "REQUEST_TOO_LARGE", "请求体不得超过 64 KiB");
-  }
-  const reader = request.body?.getReader();
-  if (!reader) return { raw: new Uint8Array(), value: {} };
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  while (true) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    size += chunk.value.byteLength;
-    if (size > LIMITS.requestBodyBytes) {
-      await reader.cancel("request too large");
-      throw new ApiError(413, "REQUEST_TOO_LARGE", "请求体不得超过 64 KiB");
-    }
-    chunks.push(chunk.value);
-  }
-  const raw = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    raw.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(raw);
-    return { raw, value: text.length === 0 ? {} : JSON.parse(text) };
-  } catch {
-    throw new ApiError(422, "INVALID_JSON", "请求体不是有效 UTF-8 JSON");
-  }
 }
 
 export async function executeIdempotentMutation(
