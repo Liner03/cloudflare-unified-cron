@@ -12,7 +12,7 @@ web
 
 ## Users
 
-推导自实施规格：单一 Cloudflare Account 的管理员和当值工程师。他们在桌面或移动浏览器中建立、暂停、恢复和审核运行业务 Worker 的逻辑 Cron 计划，并在失败或结果未知时做风险明确的人工处置。
+推导自实施规格：单一 Cloudflare Account 的管理员和当值工程师。他们在桌面或移动浏览器中观察、暂停、恢复和审核运行业务 Worker 声明的逻辑 Cron 计划，并在失败或结果未知时做风险明确的人工处置。
 
 ## Product Purpose
 

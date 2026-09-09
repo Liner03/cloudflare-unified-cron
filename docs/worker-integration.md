@@ -75,7 +75,7 @@ pnpm exec wrangler secret put REGISTRATION_TOKEN
 声明包含该 Worker 的全部 Action 和 Schedule，而不是增量操作：
 
 ```ts
-import { createRegistrationClient } from "@unified-cron/worker-sdk";
+import { createRegistrationClient } from "@unified-cron/worker-sdk/registration";
 
 export function publishRegistration(env: Env) {
   return createRegistrationClient({
@@ -125,7 +125,7 @@ Cloudflare Worker 没有通用的“部署完成”运行时 hook。应从现有
 4. 更新 `seed/targets.sql`，执行显式 manifest sync。
 5. 在控制台签发 Token，由 Worker 发布 Registration。
 6. 调用 Target check，核对无副作用 `describe()` 与最新 Registration。
-7. 检查声明和下一次时间，再进行受控 Run now。
+7. 检查声明和下一次时间，等待测试 Schedule 的下一次定时发生并核对结果。
 
 Target id 不得复用于另一物理服务。卸载时先禁用 Target、暂停 Schedule、处理 pending/retry/unknown，再移除 binding。
 

@@ -8,13 +8,13 @@
 
 ## 分层
 
-- `domain`：Clock、状态与重试策略，不访问 Cloudflare `env`。
-- `application`：Tick 顺序、派发预算、RPC 结果决策。
-- `infrastructure/d1`：全部 SQL、业务语义 repository 与短事务；路由和 application 不直接构造 SQL。
+- `domain`：Clock、状态、重试策略与 transport-neutral `DomainError`，不访问 Cloudflare `env`。
+- `application`：Tick 顺序、派发预算、RPC 结果决策与 Target compatibility 判定。
+- `infrastructure/d1`：全部 SQL、业务语义 repository 与有界短事务；不依赖 Hono、Response 或 API error envelope。
 - `infrastructure/rpc`：静态 binding allowlist 与结果校验。
 - `infrastructure/auth`：本地管理员 Session、PBKDF2 密码校验与 Origin 边界。
 - `api/routes`：按 Overview、Schedules、Targets、Registrations、Executions、System 拆分的薄 Hono 资源模块。
-- `api`：共享请求解析、Zod 入站验证和统一错误 envelope。
+- `api`：共享请求解析、HTTP 幂等适配、Zod 入站验证和统一错误 envelope。
 - `apps/web`：只通过 `/api/v1` 访问状态，不直接接触 D1 或 Service Binding。
 
 ## 核心不变量
@@ -31,6 +31,9 @@
 10. 一个 `registrationRevision` 只能对应一份规范化声明；同 revision 不同内容返回冲突。
 11. Registration 是完整期望状态：缺失 Schedule 软退役，Action 与 Schedule 批量原子替换。
 12. `operator_paused` 独立于 `declared_enabled`；任何 Registration 都不能清除 Operator Override。
+13. `(target_id, registration_revision)` 永久绑定首次声明 hash；旧 revision 可以原样回滚，不能绑定另一份内容。
+14. 所有未退役 Managed Schedule 在整个平台合计不超过 50；D1 trigger 是并发下的最终约束。
+15. Schedule 没有 Run now；Operator Override 会同时阻止新物化与既有 intent 的派发。
 
 ## Tick 顺序与预算
 

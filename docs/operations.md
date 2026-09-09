@@ -36,11 +36,13 @@ V1 每 Tick 最多派发 2 个 Attempt。大量整点 Schedule 会产生 dispatc
 - Schedule 配置：只读，来自 Worker Registration；管理员不创建、编辑或归档。
 - Pause / Resume：只修改独立 Operator Override；Worker 重新注册不能清除暂停。
 - Target disable / enable：物理派发安全开关，不修改 Worker 声明。
-- Run now：新 Execution、新幂等键，采用当前 Schedule 配置。
+- Registration Token rotate：在同一事务中签发替换 Token 并撤销旧 Token；新原始值仍只显示一次。
 - Retry：同一 Execution、同一幂等键、新 Attempt；仅当不可变快照与当前同版本 Action 都声明幂等时可用，并受 7 天窗口和 Attempt 总上限 10 约束。
 - Run again：新 Execution、新幂等键、记录 parent；可能重复业务副作用。
 - Cancel：仅 pending/retry_wait；running 不可强杀。
 - Resolve unknown：必须选择 confirmed success、confirmed failure 或 abandon，并写人工说明。
+
+Schedule 不提供 Run now。需要重放一个已完成的业务意图时使用 Execution 的 Run again；需要验证新声明时使用短周期测试 Schedule，并让统一 Tick 正常物化。
 
 ## 成功率
 
@@ -55,7 +57,7 @@ V1 每 Tick 最多派发 2 个 Attempt。大量整点 Schedule 会产生 dispatc
 - failed：30 天。
 - audit：90 天。
 - API idempotency：7 天。
-- Admin Session：到期后由登录路径和 Tick 有界清理；失败登录限流记录在窗口结束后清理。
+- Admin Session：到期后由 Tick 有界清理；失败登录限流记录在窗口结束后清理。
 - active 和 unknown：不自动清理。
 
 清理在已有 Tick 中有界执行，不增加第二个 Cron。

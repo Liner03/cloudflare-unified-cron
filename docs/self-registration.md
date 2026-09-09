@@ -20,6 +20,8 @@ V1 has one Local Administrator. The username is non-secret configuration and the
 
 Registration Tokens contain at least 256 random bits, are displayed once, and are stored only as SHA-256 hashes. Each token is bound server-side to one physical Target, has an expiry, can be revoked, and has only `registration:write`. The raw token belongs in the Registrant Worker's Worker Secret.
 
+Rotation creates a replacement Token and revokes the previous Token in one D1 transaction. The replacement raw value is also shown once; stored records retain `rotated_from` / `replaced_by` linkage for audit.
+
 ## Registration interface
 
 ```http
@@ -40,6 +42,8 @@ Content-Type: application/json
 
 The target identity is derived from the token, never accepted from the body. Repeating the same revision and body is a no-op. Reusing a revision with a different body is a conflict. The application validates the whole document before applying it atomically.
 
+Revision/hash bindings are retained permanently for the Target, not only for the current Registration. Republishing an exact historical declaration is a supported rollback; reusing its revision for different content is always rejected.
+
 Each Managed Schedule has a stable `key`. Re-registration updates the matching declaration in place. A missing key becomes retired and stops producing new Executions; existing Execution snapshots and history remain. Reintroducing a key creates a new revision without erasing its operator override.
 
 ## Effective state
@@ -53,6 +57,8 @@ AND NOT platform dispatch-paused
 ```
 
 No Registration write may modify `operator_paused`, target disablement, the global pause, an Execution, or an Attempt.
+
+The platform has no Schedule Run-now operation. Retry keeps the same Execution and idempotency key; Run Again starts from a completed Execution with an explicit duplicate-side-effect warning. A paused, retired, or Worker-declared-disabled Schedule is not dispatch-eligible for queued or newly requested operator work.
 
 ## Success rates
 

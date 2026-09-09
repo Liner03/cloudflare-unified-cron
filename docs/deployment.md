@@ -25,7 +25,7 @@
 8. 验证本地管理员登录、Target describe 和 JSON 404。
 9. 在控制台为物理 Target 签发 Registration Token，将其写为对应业务 Worker Secret。
 10. 由业务 Worker 发布完整 Registration，检查 Action、Schedule 和成功率样本。
-11. 对测试 Schedule 执行受控 Run now 并确认结果。
+11. 等待测试 Schedule 的下一次定时发生并确认结果。
 
 ```bash
 pnpm install --frozen-lockfile

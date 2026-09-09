@@ -15,7 +15,7 @@ SDK 验证后得到 `CronRequestV1`：
 - `executionId`：稳定业务执行身份。
 - `attemptId`：每次调用的新身份。
 - `idempotencyKey`：`ucp:v1:<platformInstanceId>:<executionId>`；Retry 不变化。
-- `source`：原始来源 `cron/manual/rerun`，重试时不改变。
+- `source`：原始来源 `cron/manual/rerun`，重试时不改变；`manual` 只用于迁移前历史记录，新系统不再创建。
 - `dispatchReason`：`initial/automatic_retry/operator_retry`。
 - `scheduledFor`：cron 的持久化原定时间；人工运行为 null。
 - `deadlineAt`：协作式 deadline，不能被解释为事务回滚保证。
@@ -78,3 +78,5 @@ Content-Type: application/json
 请求包含 `protocolVersion`、稳定的 `registrationRevision`、Worker 标签、完整 Action 列表和完整 Schedule 列表。Target identity 只从 Token 派生，body 中不接受 Target 或 URL。
 
 相同 revision 与内容重试为 no-op；相同 revision 携带不同内容返回 `409 REGISTRATION_REVISION_CONFLICT`。新 revision 在一个 D1 batch 中替换 Action、upsert Schedule 并软退役缺失 key。Registration 不修改 Target disable、平台全局暂停、Operator Override、Execution 或 Attempt。
+
+平台永久保存每个 Target 已见过的 revision/hash 对，因此回滚到完全相同的历史声明是合法的，而把旧 revision 用于另一份内容始终冲突。所有 Target 的未退役 Schedule 合计最多 50 个；数据库 trigger 在并发 Registration 下执行最终约束。

@@ -18,7 +18,7 @@ Registrant Worker ── scoped token ──► PUT /api/v1/registration
 Administrator ── local session ──► React SPA + operator API
 ```
 
-平台只在 `scheduled()` 中派发。Web 的 Run now、Retry 和 Run again 先把意图写入 D1，并返回 202；它们不会在浏览器请求中直接调用业务 Worker。
+平台只在 `scheduled()` 中派发。Web 的 Retry 和 Run again 先把意图写入 D1，并返回 202；它们不会在浏览器请求中直接调用业务 Worker。Schedule 本身没有人工 Run now 入口。
 
 ## 本地运行
 
