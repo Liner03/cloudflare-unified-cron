@@ -177,12 +177,14 @@ test("shows dispatch pause separately from stale heartbeat", async ({
 async function login(page: Page, path: string) {
   await page.goto(path);
   const heading = page.getByRole("heading", { name: "管理员登录" });
+  const logout = page.getByRole("button", { name: "退出管理员登录" });
+  await expect(heading.or(logout)).toBeVisible();
   if (await heading.isVisible()) {
     await page.getByLabel("用户名").fill("admin");
     await page.getByLabel("密码").fill("test-password");
     await page.getByRole("button", { name: "登录控制台" }).click();
   }
-  await expect(heading).toHaveCount(0);
+  await expect(logout).toBeVisible();
 }
 
 async function bootstrapRegistration(page: Page) {
@@ -193,7 +195,11 @@ async function bootstrapRegistration(page: Page) {
     },
     data: { targetId: "DATA", label: "Playwright", expiresInDays: 1 },
   });
-  expect(issued.ok()).toBe(true);
+  if (!issued.ok()) {
+    throw new Error(
+      `Registration Token issuance failed (${issued.status()}): ${await issued.text()}`,
+    );
+  }
   const token = readDataString(await issued.json(), "token");
   const registrationRevision = `e2e-${Date.now()}-${crypto.randomUUID()}`;
   const scheduleKey = `e2e-health-${crypto.randomUUID()}`;
