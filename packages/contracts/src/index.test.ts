@@ -6,6 +6,8 @@ import {
   jsonByteLength,
   retryPolicySchema,
   workerRegistrationV1Schema,
+  BoundedJsonError,
+  readBoundedJson,
 } from "./index";
 
 describe("contracts", () => {
@@ -119,5 +121,42 @@ describe("contracts", () => {
         schedules: [schedule, schedule],
       }).success,
     ).toBe(false);
+  });
+
+  it("reads bounded JSON while retaining the original bytes", async () => {
+    const body = JSON.stringify({ value: "中" });
+    const result = await readBoundedJson({
+      body: new Response(body).body,
+      contentLength: null,
+      maxBytes: 64,
+    });
+    expect(result.value).toEqual({ value: "中" });
+    expect(new TextDecoder().decode(result.raw)).toBe(body);
+  });
+
+  it("rejects declared, streamed, and malformed invalid bodies", async () => {
+    await expect(
+      readBoundedJson({ body: null, contentLength: "65", maxBytes: 64 }),
+    ).rejects.toMatchObject({
+      reason: "too_large",
+    } satisfies Partial<BoundedJsonError>);
+    await expect(
+      readBoundedJson({
+        body: new Response("x".repeat(65)).body,
+        contentLength: null,
+        maxBytes: 64,
+      }),
+    ).rejects.toMatchObject({
+      reason: "too_large",
+    } satisfies Partial<BoundedJsonError>);
+    await expect(
+      readBoundedJson({
+        body: new Response("{").body,
+        contentLength: null,
+        maxBytes: 64,
+      }),
+    ).rejects.toMatchObject({
+      reason: "invalid_json",
+    } satisfies Partial<BoundedJsonError>);
   });
 });

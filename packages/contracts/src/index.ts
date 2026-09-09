@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export {
+  BoundedJsonError,
+  readBoundedJson,
+  type BoundedJsonErrorReason,
+  type BoundedJsonResult,
+} from "./bounded-json";
+
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 

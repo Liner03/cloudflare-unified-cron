@@ -102,6 +102,29 @@ describe("worker sdk", () => {
     } satisfies Partial<RegistrationError>);
   });
 
+  it("rejects malformed and oversized registration responses", async () => {
+    const declaration = {
+      protocolVersion: 1 as const,
+      registrationRevision: "build-123",
+      worker: { label: "Data Worker" },
+      actions: [],
+      schedules: [],
+    };
+    for (const [body, code] of [
+      ["{", "INVALID_REGISTRATION_RESPONSE"],
+      ["x".repeat(65 * 1024), "REGISTRATION_RESPONSE_TOO_LARGE"],
+    ] as const) {
+      const client = createRegistrationClient({
+        endpoint: "https://cron.example.com/api/v1/registration",
+        token: `ucrt_${"c".repeat(43)}`,
+        fetcher: () => Promise.resolve(new Response(body)),
+      });
+      await expect(client.register(declaration)).rejects.toMatchObject({
+        code,
+      });
+    }
+  });
+
   it("wraps successful actions with current attempt identity", async () => {
     const run = vi.fn(() =>
       Promise.resolve({ summary: "synchronized", output: { count: 2 } }),

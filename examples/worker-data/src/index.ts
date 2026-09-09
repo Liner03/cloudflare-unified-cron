@@ -1,8 +1,5 @@
-import {
-  createCronHandler,
-  createRegistrationClient,
-  defineAction,
-} from "@unified-cron/worker-sdk";
+import { createCronHandler, defineAction } from "@unified-cron/worker-sdk";
+import { createRegistrationClient } from "@unified-cron/worker-sdk/registration";
 import { CronEntrypointBase } from "@unified-cron/worker-sdk/entrypoint";
 import { jsonValueSchema } from "@unified-cron/contracts";
 import { z } from "zod";
