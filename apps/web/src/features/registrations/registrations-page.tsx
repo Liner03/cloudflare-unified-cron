@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Clipboard, KeyRound, Plus, ShieldAlert } from "lucide-react";
+import {
+  Check,
+  Clipboard,
+  KeyRound,
+  Plus,
+  RotateCw,
+  ShieldAlert,
+} from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ActionConfirm } from "@/components/shared/action-confirm";
@@ -42,6 +49,7 @@ interface RevealedToken {
   targetId: string;
   label: string;
   expiresAt: string;
+  rotatedFromId?: string | undefined;
 }
 
 export function RegistrationsPage() {
@@ -97,6 +105,23 @@ export function RegistrationsPage() {
     },
     onError: (error) =>
       toast.error("无法撤销 Token", { description: errorMessage(error) }),
+  });
+  const rotate = useMutation({
+    mutationFn: (id: string) =>
+      apiMutate(
+        `/api/v1/registration-tokens/${id}/rotate`,
+        { expiresInDays: 90 },
+        issuedRegistrationTokenSchema,
+      ),
+    onSuccess: async ({ data }) => {
+      setRevealed(data);
+      setCopied(false);
+      await queryClient.invalidateQueries({
+        queryKey: ["registration-tokens"],
+      });
+    },
+    onError: (error) =>
+      toast.error("无法轮换 Token", { description: errorMessage(error) }),
   });
   const submitIssue = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -267,14 +292,14 @@ export function RegistrationsPage() {
                 <Table className="min-w-[900px] table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[23%]">凭据</TableHead>
-                      <TableHead className="w-[32%]">
+                      <TableHead className="w-[22%]">凭据</TableHead>
+                      <TableHead className="w-[29%]">
                         Target / Registration
                       </TableHead>
-                      <TableHead className="w-[13%]">最近使用</TableHead>
-                      <TableHead className="w-[13%]">到期</TableHead>
-                      <TableHead className="w-[10%]">状态</TableHead>
-                      <TableHead className="w-[9%]" />
+                      <TableHead className="w-[12%]">最近使用</TableHead>
+                      <TableHead className="w-[12%]">到期</TableHead>
+                      <TableHead className="w-[9%]">状态</TableHead>
+                      <TableHead className="w-[16%] text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -309,22 +334,45 @@ export function RegistrationsPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             {status === "active" ? (
-                              <ActionConfirm
-                                confirmLabel="撤销 Token"
-                                danger
-                                description="撤销立即阻止后续 Registration；不会删除当前声明或管理员 Session。"
-                                onConfirm={() => revoke.mutate(token.id)}
-                                title="撤销这个 Registration Token？"
-                                trigger={
-                                  <Button
-                                    disabled={revoke.isPending}
-                                    size="sm"
-                                    variant="ghost"
-                                  >
-                                    撤销
-                                  </Button>
-                                }
-                              />
+                              <div className="flex justify-end gap-1">
+                                <ActionConfirm
+                                  confirmLabel="轮换并撤销旧 Token"
+                                  description="平台会原子签发替换 Token 并撤销旧值；新值仍只显示一次。"
+                                  onConfirm={() => rotate.mutate(token.id)}
+                                  title="轮换这个 Registration Token？"
+                                  trigger={
+                                    <Button
+                                      aria-label={`轮换 ${token.label} ${shortId(token.id)}`}
+                                      disabled={
+                                        rotate.isPending || revoke.isPending
+                                      }
+                                      size="sm"
+                                      variant="ghost"
+                                    >
+                                      <RotateCw size={13} /> 轮换
+                                    </Button>
+                                  }
+                                />
+                                <ActionConfirm
+                                  confirmLabel="撤销 Token"
+                                  danger
+                                  description="撤销立即阻止后续 Registration；不会删除当前声明或管理员 Session。"
+                                  onConfirm={() => revoke.mutate(token.id)}
+                                  title="撤销这个 Registration Token？"
+                                  trigger={
+                                    <Button
+                                      aria-label={`撤销 ${token.label} ${shortId(token.id)}`}
+                                      disabled={
+                                        revoke.isPending || rotate.isPending
+                                      }
+                                      size="sm"
+                                      variant="ghost"
+                                    >
+                                      撤销
+                                    </Button>
+                                  }
+                                />
+                              </div>
                             ) : null}
                           </TableCell>
                         </TableRow>
@@ -348,7 +396,11 @@ export function RegistrationsPage() {
           onEscapeKeyDown={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
         >
-          <DialogTitle>立即保存这个 Token</DialogTitle>
+          <DialogTitle>
+            {revealed?.rotatedFromId
+              ? "立即保存替换 Token"
+              : "立即保存这个 Token"}
+          </DialogTitle>
           <DialogDescription>
             这是唯一一次显示原始值。关闭后平台只能看到哈希，无法恢复。
           </DialogDescription>

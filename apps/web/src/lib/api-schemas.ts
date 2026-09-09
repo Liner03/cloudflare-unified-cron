@@ -162,6 +162,8 @@ const registrationTokenSchema = z.object({
   revokedAt: z.string().nullable(),
   createdBy: z.string(),
   createdAt: z.string(),
+  rotatedFromId: z.string().nullable(),
+  replacedById: z.string().nullable(),
   registration: z
     .object({
       revision: z.string(),
@@ -184,6 +186,7 @@ export const issuedRegistrationTokenSchema = z.object({
     label: z.string(),
     token: z.string(),
     expiresAt: z.string(),
+    rotatedFromId: z.string().optional(),
   }),
 });
 

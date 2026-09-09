@@ -46,8 +46,9 @@ test("reveals a Registration Token once and never lists its raw value", async ({
   page,
 }) => {
   await login(page, "/registrations");
+  const label = `browser-e2e-${Date.now()}`;
   await page.getByRole("button", { name: "签发 Token" }).click();
-  await page.getByLabel("用途标签").fill(`browser-e2e-${Date.now()}`);
+  await page.getByLabel("用途标签").fill(label);
   await page.getByLabel("有效期").selectOption("30");
   await page.getByRole("button", { name: "签发一次性 Token" }).click();
 
@@ -61,11 +62,31 @@ test("reveals a Registration Token once and never lists its raw value", async ({
   expect(rawToken).toMatch(/^ucrt_[A-Za-z0-9_-]{43}$/);
   await secretDialog.getByRole("button", { name: "我已安全保存" }).click();
   await expect(secretDialog).toHaveCount(0);
+  await expect(page.getByRole("columnheader", { name: "操作" })).toBeVisible();
+  const tokenRow = page.getByRole("row").filter({ hasText: label });
+  await tokenRow.getByRole("button", { name: /轮换/ }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "轮换并撤销旧 Token" })
+    .click();
+  const replacementDialog = page.getByRole("dialog", {
+    name: "立即保存替换 Token",
+  });
+  await expect(replacementDialog).toBeVisible();
+  const replacementToken = await replacementDialog
+    .locator(".token-reveal-value")
+    .innerText();
+  expect(replacementToken).toMatch(/^ucrt_[A-Za-z0-9_-]{43}$/);
+  expect(replacementToken).not.toBe(rawToken);
+  await replacementDialog.getByRole("button", { name: "我已安全保存" }).click();
   await page.reload();
   await expect(page.getByText(rawToken, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(replacementToken, { exact: true })).toHaveCount(
+    0,
+  );
 });
 
-test("shows Operator Override separately and persists a Run now intent", async ({
+test("shows and clears Operator Override separately from Worker intent", async ({
   page,
 }) => {
   await login(page, "/schedules");
@@ -80,14 +101,6 @@ test("shows Operator Override separately and persists a Run now intent", async (
   await page.getByRole("button", { name: "恢复" }).click();
   await page.getByRole("button", { name: "恢复计划" }).last().click();
   await expect(page.getByText(/无管理员覆盖/).first()).toBeVisible();
-
-  await page.getByRole("button", { name: "立即安排" }).click();
-  await page
-    .getByRole("button", { name: "立即安排", exact: true })
-    .last()
-    .click();
-  await expect(page.getByRole("heading", { name: /执行/ })).toBeVisible();
-  await expect(page.getByText("执行意图尚未被 Tick 领取。")).toBeVisible();
 });
 
 test("keeps unknown API paths JSON and exposes mobile navigation", async ({

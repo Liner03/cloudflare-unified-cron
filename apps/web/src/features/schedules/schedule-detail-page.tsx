@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CirclePause, CirclePlay, Play } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, CirclePause, CirclePlay } from "lucide-react";
+import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ActionConfirm } from "@/components/shared/action-confirm";
 import {
@@ -20,16 +20,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiGet, apiMutate, errorMessage } from "@/lib/api-client";
-import {
-  executionMutationSchema,
-  scheduleDetailSchema,
-  stateMutationSchema,
-} from "@/lib/api-schemas";
+import { scheduleDetailSchema, stateMutationSchema } from "@/lib/api-schemas";
 import { formatTime, shortId } from "@/lib/format";
 
 export function ScheduleDetailPage() {
   const { id = "" } = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["schedule", id],
@@ -38,16 +33,9 @@ export function ScheduleDetailPage() {
     enabled: id.length > 0,
   });
   const mutation = useMutation({
-    mutationFn: async (operation: "run" | "pause" | "resume") => {
+    mutationFn: async (operation: "pause" | "resume") => {
       const schedule = query.data?.data;
       if (!schedule) throw new Error("Schedule 尚未加载");
-      if (operation === "run") {
-        return apiMutate(
-          `/api/v1/schedules/${id}/run`,
-          {},
-          executionMutationSchema,
-        );
-      }
       return apiMutate(
         `/api/v1/schedules/${id}/${operation}`,
         {},
@@ -57,20 +45,15 @@ export function ScheduleDetailPage() {
         },
       );
     },
-    onSuccess: async (result, operation) => {
+    onSuccess: async (_result, operation) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["schedule", id] }),
         queryClient.invalidateQueries({ queryKey: ["schedules"] }),
         queryClient.invalidateQueries({ queryKey: ["overview"] }),
       ]);
-      if (operation === "run" && "executionId" in result.data) {
-        toast.success("执行意图已保存");
-        void navigate(`/executions/${String(result.data.executionId)}`);
-      } else {
-        toast.success(
-          operation === "pause" ? "Schedule 已暂停" : "Schedule 已恢复",
-        );
-      }
+      toast.success(
+        operation === "pause" ? "Schedule 已暂停" : "Schedule 已恢复",
+      );
     },
     onError: (error) =>
       toast.error("操作未完成", { description: errorMessage(error) }),
@@ -97,17 +80,6 @@ export function ScheduleDetailPage() {
         title={schedule.name}
       />
       <div className="mb-5 flex flex-wrap gap-2">
-        <ActionConfirm
-          confirmLabel="立即安排"
-          description="这会创建新的 Execution 和新的幂等键。HTTP 请求只保存意图，业务 RPC 将由后续可用 Tick 领取。"
-          onConfirm={() => mutation.mutate("run")}
-          title="安排一次新的人工运行？"
-          trigger={
-            <Button disabled={mutation.isPending}>
-              <Play size={15} /> 立即安排
-            </Button>
-          }
-        />
         {!schedule.operatorPaused ? (
           <ActionConfirm
             confirmLabel="暂停计划"
@@ -198,7 +170,7 @@ export function ScheduleDetailPage() {
           <CardContent className="px-0 pb-0">
             {schedule.recentExecutions.length === 0 ? (
               <div className="p-5 text-sm text-muted-foreground">
-                尚无执行记录。可先进行一次受控的立即安排。
+                尚无执行记录。等待 Worker 声明的下一次定时发生。
               </div>
             ) : (
               <Table>

@@ -438,7 +438,7 @@ export function OverviewPage() {
         <div>
           <h2>先保存意图，再让 Tick 安全领取。</h2>
           <p>
-            Worker 声明计划；人工运行和重试都不会在浏览器请求中直接调用业务
+            Worker 声明计划；Retry 和 Run again 都不会在浏览器请求中直接调用业务
             Worker。
           </p>
         </div>

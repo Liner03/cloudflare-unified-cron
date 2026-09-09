@@ -1,13 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { Play, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form-controls";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -25,12 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { apiGet, apiMutate, errorMessage } from "@/lib/api-client";
-import {
-  executionMutationSchema,
-  schedulesSchema,
-  type ScheduleSummary,
-} from "@/lib/api-schemas";
+import { apiGet } from "@/lib/api-client";
+import { schedulesSchema, type ScheduleSummary } from "@/lib/api-schemas";
 import { formatTime } from "@/lib/format";
 
 const columnHelper = createColumnHelper<ScheduleSummary>();
@@ -39,7 +34,6 @@ export function SchedulesPage() {
   const [params, setParams] = useSearchParams();
   const search = params.get("search") ?? "";
   const enabled = params.get("enabled") ?? "";
-  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["schedules", search, enabled],
     queryFn: ({ signal }) =>
@@ -49,19 +43,6 @@ export function SchedulesPage() {
         signal,
       ),
   });
-  const run = useMutation({
-    mutationFn: (id: string) =>
-      apiMutate(`/api/v1/schedules/${id}/run`, {}, executionMutationSchema),
-    onSuccess: async ({ data }) => {
-      await queryClient.invalidateQueries({ queryKey: ["schedules"] });
-      toast.success("执行意图已保存", {
-        description: `将在可用 Tick 中领取：${data.executionId}`,
-      });
-    },
-    onError: (error) =>
-      toast.error("无法立即安排", { description: errorMessage(error) }),
-  });
-
   const columns = [
     columnHelper.accessor("name", {
       header: "计划",
@@ -133,21 +114,11 @@ export function SchedulesPage() {
     }),
     columnHelper.display({
       id: "actions",
-      header: "",
+      header: "操作",
       cell: ({ row }) => (
         <div className="flex justify-end gap-2">
           <Button asChild size="sm" variant="ghost">
             <Link to={`/schedules/${row.original.id}`}>查看</Link>
-          </Button>
-          <Button
-            aria-label={`立即安排 ${row.original.name}`}
-            disabled={run.isPending}
-            onClick={() => run.mutate(row.original.id)}
-            size="sm"
-            variant="outline"
-          >
-            <Play size={13} />
-            安排
           </Button>
         </div>
       ),
@@ -162,7 +133,7 @@ export function SchedulesPage() {
   return (
     <>
       <PageHeader
-        description="计划配置来自业务 Worker 的完整 Registration；管理员只能暂停覆盖或安排一次受控运行。"
+        description="计划配置来自业务 Worker 的完整 Registration；管理员只能查看声明或设置暂停覆盖。"
         title="计划"
       />
       <div className="toolbar" role="search">

@@ -4,6 +4,7 @@ DELETE FROM attempts;
 DELETE FROM executions;
 DELETE FROM schedules;
 DELETE FROM registered_actions;
+DELETE FROM registration_revisions;
 DELETE FROM registrations;
 DELETE FROM registration_tokens;
 DELETE FROM admin_sessions;
