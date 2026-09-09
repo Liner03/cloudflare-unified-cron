@@ -6,7 +6,7 @@
 
 - D1 `database_id`。
 - 自定义域名 `routes.pattern` 与 `PUBLIC_ORIGIN`。
-- Cloudflare Access team domain 和 Application Audience。
+- 本地管理员用户名 `ADMIN_USERNAME`。
 - 稳定且永久的 `PLATFORM_INSTANCE_ID` UUID。
 - `BUILD_VERSION`。
 - 每个目标 Worker 的 service/binding/entrypoint。
@@ -17,14 +17,15 @@
 
 1. 创建平台 D1 和业务所需存储。
 2. 应用 D1 migrations。
-3. 先部署兼容 SDK 的业务 Worker。
-4. 配置 Cloudflare Access，保护整个自定义域名。
+3. 先部署兼容 SDK 且能发布 Registration 的业务 Worker。
+4. 生成管理员密码哈希，并把 `ADMIN_PASSWORD_HASH` 写为平台 Worker Secret。
 5. 配置 Service Bindings、Target manifest 和静态资源。
 6. 构建 UI，部署平台 Worker。
 7. 显式同步 Target 元数据。
-8. 验证 Access 登录、JWT、Target describe 和 JSON 404。
-9. 创建暂停测试计划，Run now 并确认结果。
-10. 最后启用受控生产 Schedule。
+8. 验证本地管理员登录、Target describe 和 JSON 404。
+9. 在控制台为物理 Target 签发 Registration Token，将其写为对应业务 Worker Secret。
+10. 由业务 Worker 发布完整 Registration，检查 Action、Schedule 和成功率样本。
+11. 对测试 Schedule 执行受控 Run now 并确认结果。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -32,6 +33,8 @@ pnpm verify
 pnpm db:migrate:remote
 pnpm targets:sync:remote
 pnpm --filter @unified-cron/example-worker-data exec wrangler deploy --config wrangler.jsonc
+pnpm --filter @unified-cron/platform auth:hash-password
+pnpm --filter @unified-cron/platform exec wrangler secret put ADMIN_PASSWORD_HASH --config wrangler.jsonc
 pnpm --filter @unified-cron/web build
 pnpm --filter @unified-cron/platform exec wrangler deploy --config wrangler.jsonc
 ```
@@ -40,9 +43,19 @@ pnpm --filter @unified-cron/platform exec wrangler deploy --config wrangler.json
 
 生产平台配置只包含一个 `* * * * *` Trigger，并关闭 `workers_dev` 与 preview URLs。Static Assets 对 `/api` 使用 Worker-first；未知 API 路径必须返回 JSON 404，不能被 SPA fallback 吞掉。
 
-## Access
+为每个业务 Worker 设置控制台一次性显示的 Token：
 
-Cloudflare Access 保护 UI 与 API。平台 API 还会验证 `Cf-Access-Jwt-Assertion` 的签名、issuer、audience 和过期时间。生产 `AUTH_MODE` 必须为 `access`；缺少配置时 fail closed。
+```bash
+pnpm --filter @unified-cron/example-worker-data exec wrangler secret put REGISTRATION_TOKEN --config wrangler.jsonc
+```
+
+Secret 使用 Wrangler 的交互式提示输入；不要作为命令参数、shell history 或 CI 日志传递。
+
+## 认证边界
+
+平台应用认证始终由本地管理员账号负责。登录产生随机、HttpOnly、SameSite=Strict 的 D1 Session；生产 Cookie 使用 `Secure` 与 `__Host-` 前缀。登录失败按来源进行持久化限流。
+
+Cloudflare Access 可以作为自定义域名的可选外层保护，但不替代应用 Session，也不向 Registration Token 授予管理员权限。机器 Token 只拥有 `registration:write`，在服务端绑定一个预授权 Target，原始值不会落库。
 
 ## 回滚
 

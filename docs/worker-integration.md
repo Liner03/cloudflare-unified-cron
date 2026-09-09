@@ -52,7 +52,7 @@ const handler = createCronHandler<Env>({
 });
 ```
 
-平台通过 `actionVersion` 精确选择。先部署兼容两个版本的 Target，再更新平台 manifest；确认旧 Execution 超出保留与重试窗口后，才可移除旧版本。
+平台通过 `actionVersion` 精确选择。先部署同时兼容两个版本的 Target，再发布包含新旧版本的 Registration；确认旧 Execution 超出保留与重试窗口后，才可移除旧版本。
 
 ## 2. 实现业务幂等
 
@@ -64,17 +64,71 @@ const handler = createCronHandler<Env>({
 
 示例 Worker 用自己的 D1 `idempotent_results` 演示结果去重；命中旧业务结果时，SDK 仍用本次 request 的 attemptId 重新包装响应。
 
-## 3. 声明平台白名单
+## 3. 发布完整 Registration
+
+使用管理员签发并绑定到该 Target 的 Token。平台只保存 SHA-256 哈希；原始值只放在业务 Worker Secret：
+
+```bash
+pnpm exec wrangler secret put REGISTRATION_TOKEN
+```
+
+声明包含该 Worker 的全部 Action 和 Schedule，而不是增量操作：
+
+```ts
+import { createRegistrationClient } from "@unified-cron/worker-sdk";
+
+export function publishRegistration(env: Env) {
+  return createRegistrationClient({
+    endpoint: env.PLATFORM_REGISTRATION_URL,
+    token: env.REGISTRATION_TOKEN,
+  }).register({
+    protocolVersion: 1,
+    registrationRevision: env.BUILD_ID,
+    worker: { label: "Billing Worker" },
+    actions: [
+      {
+        name: "syncInvoices",
+        version: 1,
+        label: "同步发票",
+        idempotent: true,
+      },
+    ],
+    schedules: [
+      {
+        key: "hourly-invoices",
+        name: "每小时同步发票",
+        action: "syncInvoices",
+        actionVersion: 1,
+        cronExpression: "5 * * * *",
+        timezone: "UTC",
+        payload: {},
+        retryPolicy: {
+          maxAttempts: 3,
+          delaysSeconds: [60, 300],
+          retryOnUnknown: true,
+        },
+      },
+    ],
+  });
+}
+```
+
+Cloudflare Worker 没有通用的“部署完成”运行时 hook。应从现有的受控部署烟测、私有运维入口或自身已有的可靠生命周期路径调用 `publishRegistration()`；不要在每个普通业务请求中注册。重复发布相同 revision 和内容是 no-op。
+
+删除声明中的 Schedule key 会软退役该计划并保留 Execution 历史。重新加入同 key 会恢复同一逻辑计划，但不会清除管理员的暂停覆盖。
+
+## 4. 声明物理平台白名单
 
 1. 在目标 Worker 部署 `CronEntrypoint`。
 2. 在平台 `wrangler.jsonc` 的 `services` 添加 binding、service、entrypoint。
-3. 在 `targets.manifest.ts` 添加 Target/Action/version/idempotent。
+3. 在 `targets.manifest.ts` 只添加 Target id、label、binding、service、entrypoint 与 protocol version。
 4. 更新 `seed/targets.sql`，执行显式 manifest sync。
-5. 调用控制台 Target check，核对无副作用 `describe()`。
-6. 先创建暂停 Schedule，preview 后进行受控 Run now，再启用。
+5. 在控制台签发 Token，由 Worker 发布 Registration。
+6. 调用 Target check，核对无副作用 `describe()` 与最新 Registration。
+7. 检查声明和下一次时间，再进行受控 Run now。
 
 Target id 不得复用于另一物理服务。卸载时先禁用 Target、暂停 Schedule、处理 pending/retry/unknown，再移除 binding。
 
-## 4. 迁移旧 Cron
+## 5. 迁移旧 Cron
 
 先完成协议和幂等适配，再显式把旧 Worker 的 `crons` 设置为空数组并部署；仅删除配置属性可能保留旧 Trigger。等待配置传播并确认旧入口停止后，再启用平台 Schedule。

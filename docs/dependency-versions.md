@@ -1,6 +1,6 @@
 # 依赖版本
 
-锁定日期：2026-09-08。准确解析见 `pnpm-lock.yaml`。
+锁定日期：2026-09-09。准确解析见 `pnpm-lock.yaml`。
 
 | 依赖                      |           版本 | 用途                                  |
 | ------------------------- | -------------: | ------------------------------------- |
@@ -12,15 +12,13 @@
 | Hono                      |         4.13.7 | 管理 API                              |
 | Zod                       |          4.5.4 | 协议、API 与表单校验                  |
 | cron-parser               |         5.10.0 | 五字段 Cron、IANA timezone、DST       |
-| jose                      |         6.2.12 | Access JWT/JWKS 验证                  |
 | React / React DOM         |         19.2.8 | 控制台                                |
 | Vite                      |          8.2.2 | SPA 构建与开发代理                    |
 | Tailwind CSS              |          4.3.3 | shadcn 语义样式                       |
 | TanStack Query            |        5.102.8 | 缓存、轮询与失效                      |
 | TanStack Table            |         8.21.3 | Schedule 表格                         |
-| React Hook Form           |         7.87.0 | Schedule 表单                         |
 | GSAP / @gsap/react        | 3.15.0 / 2.1.2 | Overview ScrollTrigger 动效           |
 | Geist Variable            |          5.3.0 | 本地自托管 UI 字体                    |
 | Playwright                |         1.63.0 | 桌面与移动 E2E                        |
 
-Wrangler、compatibility date 和关键依赖升级必须单独提交，并重新运行 Cron DST、D1 CAS、RPC、Access 和浏览器回归。
+Wrangler、compatibility date 和关键依赖升级必须单独提交，并重新运行 Cron DST、D1 CAS、RPC、本地认证、Registration 和浏览器回归。

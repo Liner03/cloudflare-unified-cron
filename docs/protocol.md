@@ -47,7 +47,7 @@ SDK 只把显式 `CronError.retryable()` 与 `CronError.permanent()` 包装成�
 
 ## 版本与序列化
 
-跨 RPC 边界只传普通 JSON 值；禁止函数、Stream、RpcTarget、BigInt、循环对象和 Error 实例。Target manifest 同时固定 protocol version、Action name、Action version 与幂等声明。
+跨 RPC 边界只传普通 JSON 值；禁止函数、Stream、RpcTarget、BigInt、循环对象和 Error 实例。部署 Target manifest 只固定物理 binding、service、entrypoint 与 protocol version；Action name、version、标签和幂等声明来自该 Worker 的最新 Registration。
 
 协议升级顺序：先让目标兼容新旧版本，再升级平台，最后移除旧能力。不得把旧 Execution 静默改发到新 Action version。
 
@@ -63,3 +63,18 @@ createCronHandler({
 ```
 
 空版本数组和重复版本会在 Worker 启动时失败，避免部署含糊的能力 manifest。
+
+## Registration 协议
+
+业务 Worker 使用 SDK 对以下端点发布完整期望状态：
+
+```http
+PUT /api/v1/registration
+Authorization: Bearer <registration-token>
+Idempotency-Key: registration:<declaration-digest>
+Content-Type: application/json
+```
+
+请求包含 `protocolVersion`、稳定的 `registrationRevision`、Worker 标签、完整 Action 列表和完整 Schedule 列表。Target identity 只从 Token 派生，body 中不接受 Target 或 URL。
+
+相同 revision 与内容重试为 no-op；相同 revision 携带不同内容返回 `409 REGISTRATION_REVISION_CONFLICT`。新 revision 在一个 D1 batch 中替换 Action、upsert Schedule 并软退役缺失 key。Registration 不修改 Target disable、平台全局暂停、Operator Override、Execution 或 Attempt。
