@@ -24,7 +24,6 @@
     "@unified-cron/worker-sdk": "workspace:*",
     "cron-parser": "5.10.0",
     "hono": "4.13.7",
-    "jose": "6.2.12",
     "zod": "4.5.4"
   },
   "devDependencies": {
