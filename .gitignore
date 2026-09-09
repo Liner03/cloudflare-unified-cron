@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 dist/
 coverage/
 playwright-report/
@@ -10,5 +11,5 @@ test-results/
 .env.*
 !.env.example
 *.tsbuildinfo
+*.cpuprofile
 .DS_Store
-

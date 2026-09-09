@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "worker-data",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "BUSINESS_DB",
+      "database_name": "REPLACE_WITH_BUSINESS_DB_NAME",
+      "database_id": "REPLACE_WITH_BUSINESS_D1_DATABASE_ID",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": { "BUILD_ID": "REPLACE_WITH_BUILD_ID" },
+  "observability": { "enabled": true },
+}

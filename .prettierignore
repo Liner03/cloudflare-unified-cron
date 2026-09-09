@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.wrangler/
+.pnpm-store/
+playwright-report/
+test-results/
+pnpm-lock.yaml
+**/worker-configuration.d.ts
+.impeccable/review/
+.impeccable/hook.cache.json
+.impeccable/hook.pending.json

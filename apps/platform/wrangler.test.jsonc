@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "unified-cron-platform-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "unified-cron-platform-test-db",
+      "database_id": "00000000-0000-0000-0000-000000000003",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": {
+    "APP_ENV": "test",
+    "AUTH_MODE": "local",
+    "ACCESS_TEAM_DOMAIN": "https://test.cloudflareaccess.com",
+    "ACCESS_AUD": "test",
+    "PUBLIC_ORIGIN": "http://localhost:8787",
+    "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000003",
+    "BUILD_VERSION": "test",
+  },
+}

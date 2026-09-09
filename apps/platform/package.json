@@ -1,0 +1,35 @@
+{
+  "name": "@unified-cron/platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.local.jsonc --test-scheduled",
+    "build": "wrangler deploy --config wrangler.dry-run.jsonc --dry-run --outdir dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "types": "wrangler types --config wrangler.local.jsonc worker-configuration.d.ts",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:unit": "vitest run --coverage --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts && vitest run --config vitest.auth.config.ts",
+    "db:migrate:local": "wrangler d1 migrations apply unified-cron-platform-local-db --local --config wrangler.local.jsonc",
+    "seed:local": "wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file seed/local.sql",
+    "targets:sync:local": "wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file seed/targets.sql",
+    "targets:sync:remote": "wrangler d1 execute unified-cron-platform-db --remote --config wrangler.jsonc --file seed/targets.sql",
+    "db:migrate:remote": "wrangler d1 migrations apply unified-cron-platform-db --remote --config wrangler.jsonc"
+  },
+  "dependencies": {
+    "@unified-cron/contracts": "workspace:*",
+    "@unified-cron/worker-sdk": "workspace:*",
+    "cron-parser": "5.10.0",
+    "hono": "4.13.7",
+    "jose": "6.2.12",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.5",
+    "@cloudflare/workers-types": "5.20260908.1",
+    "@vitest/coverage-v8": "4.1.11",
+    "vitest": "4.1.11",
+    "wrangler": "4.129.1"
+  }
+}

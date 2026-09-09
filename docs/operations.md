@@ -1,0 +1,54 @@
+# 运维手册
+
+## 健康含义
+
+- API 可查询：控制面请求可用。
+- Tick healthy：最近 3 分钟内成功完成 scheduled handler。
+- Target compatible：上次人工 describe 检查成功。
+- Execution succeeded：收到并持久化有效业务结果。
+
+四者不能互相替代。Overview 不根据页面可打开就显示 Scheduler 正常。
+
+## 常见故障
+
+### D1 不可用
+
+平台停止新派发，API 返回 503，不回退到内存 Schedule。恢复后按 D1 状态、租约和 misfire 策略继续。
+
+### RPC 超时或连接中断
+
+结果记为 unknown；这不证明业务未执行。先用 executionId、attemptId、targetId 和 action 检查 Workers Logs 与业务系统。只有快照和当前 manifest 都声明幂等，且策略允许时，才可 Retry。
+
+### 业务完成但 finalize 失败
+
+Execution 保持 running，租约到期后恢复为 unknown 或安全 retry_wait。不要凭日志手动直接写 succeeded；使用控制台的人工核实并填写说明。
+
+### Target 禁用或不兼容
+
+禁用只阻止新派发，不消耗 Attempt，也不强杀 running RPC。先暂停相关 Schedule，处理 existing pending/retry/unknown，升级目标，再执行 Target check。
+
+### 集中到期
+
+V1 每 Tick 最多派发 2 个 Attempt。大量整点 Schedule 会产生 dispatch lag。优先错开分钟；提高批量前必须测量 CPU、D1 statements 与 rows。
+
+## 人工操作
+
+- Run now：新 Execution、新幂等键，采用当前 Schedule 配置。
+- Retry：同一 Execution、同一幂等键、新 Attempt；仅当不可变快照与当前同版本 Action 都声明幂等时可用，并受 7 天窗口和 Attempt 总上限 10 约束。
+- Run again：新 Execution、新幂等键、记录 parent；可能重复业务副作用。
+- Cancel：仅 pending/retry_wait；running 不可强杀。
+- Resolve unknown：必须选择 confirmed success、confirmed failure 或 abandon，并写人工说明。
+
+## 保留与清理
+
+- succeeded/skipped/cancelled：14 天。
+- failed：30 天。
+- audit：90 天。
+- API idempotency：7 天。
+- active 和 unknown：不自动清理。
+
+清理在已有 Tick 中有界执行，不增加第二个 Cron。
+
+## 日志
+
+D1 保存有界审计与结果摘要。完整调试日志使用 Workers Logs，并以 platformInstanceId、tickId、scheduleId、executionId、attemptId、targetId、action 和 errorCode 关联。不得记录 JWT、Cookie、Secret、完整请求头或无界第三方响应。

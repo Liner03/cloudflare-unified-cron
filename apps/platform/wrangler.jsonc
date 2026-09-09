@@ -1,0 +1,42 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "unified-cron-platform",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "cron.example.com", "custom_domain": true }],
+  "triggers": { "crons": ["* * * * *"] },
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api", "/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "unified-cron-platform-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "services": [
+    {
+      "binding": "CRON_DATA",
+      "service": "worker-data",
+      "entrypoint": "CronEntrypoint",
+    },
+  ],
+  "vars": {
+    "APP_ENV": "production",
+    "AUTH_MODE": "access",
+    "ACCESS_TEAM_DOMAIN": "https://REPLACE_TEAM.cloudflareaccess.com",
+    "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUDIENCE",
+    "PUBLIC_ORIGIN": "https://cron.example.com",
+    "PLATFORM_INSTANCE_ID": "REPLACE_WITH_STABLE_UUID",
+    "BUILD_VERSION": "REPLACE_WITH_BUILD_VERSION",
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+}

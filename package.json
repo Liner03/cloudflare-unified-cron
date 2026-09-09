@@ -4,7 +4,35 @@
   "private": true,
   "packageManager": "pnpm@11.21.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "pnpm --filter @unified-cron/contracts build && pnpm --filter @unified-cron/worker-sdk build && pnpm --filter @unified-cron/web build && pnpm --filter @unified-cron/example-worker-data build && pnpm --filter @unified-cron/platform build",
+    "dev": "pnpm --parallel --filter @unified-cron/example-worker-data --filter @unified-cron/platform --filter @unified-cron/web dev",
+    "db:migrate:local": "pnpm --filter @unified-cron/example-worker-data db:migrate:local && pnpm --filter @unified-cron/platform db:migrate:local",
+    "seed:local": "pnpm --filter @unified-cron/platform seed:local",
+    "targets:sync:local": "pnpm --filter @unified-cron/platform targets:sync:local",
+    "targets:sync:remote": "pnpm --filter @unified-cron/platform targets:sync:remote",
+    "db:migrate:remote": "pnpm --filter @unified-cron/example-worker-data db:migrate:remote && pnpm --filter @unified-cron/platform db:migrate:remote",
+    "typecheck": "pnpm -r typecheck",
+    "test:unit": "pnpm --filter @unified-cron/contracts --filter @unified-cron/worker-sdk test && pnpm --filter @unified-cron/platform test:unit",
+    "test:integration": "pnpm --filter @unified-cron/platform test:integration && pnpm --filter @unified-cron/example-worker-data test:integration",
+    "test:e2e:reset": "pnpm --filter @unified-cron/platform exec wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file ../../tests/e2e/reset.sql",
+    "test:e2e": "pnpm --filter @unified-cron/e2e test",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "deploy:dry-run": "pnpm --filter @unified-cron/web build && pnpm --filter @unified-cron/example-worker-data build && pnpm --filter @unified-cron/platform build",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm build && pnpm deploy:dry-run && pnpm test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.3",
+    "eslint": "10.10.0",
+    "globals": "17.12.0",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vitest": "4.1.11",
+    "wrangler": "4.129.1"
   }
 }
-
