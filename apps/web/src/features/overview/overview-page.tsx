@@ -8,6 +8,7 @@ import {
   RadioTower,
   RefreshCw,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { ErrorState, LoadingState } from "@/components/shared/page-states";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -165,6 +166,7 @@ export function OverviewPage() {
           <div className="signal-legend" aria-label="运行状态图例">
             <span className="is-success">成功</span>
             <span className="is-running">运行中</span>
+            <span className="is-retry">等待重试</span>
             <span className="is-warning">结果未知</span>
             <span className="is-failure">失败</span>
             <span className="is-muted">无记录</span>
@@ -478,10 +480,6 @@ function ExecutionTrace({
       ];
     })
     .sort((left, right) => left.x - right.x);
-  const path =
-    points.length === 0
-      ? "M 0 16 L 100 16"
-      : `M 0 16 ${points.map((point) => `L ${point.x.toFixed(2)} ${point.y}`).join(" ")} L 100 16`;
   const summary =
     points.length === 0
       ? `${scheduleName} 最近 24 小时没有执行记录`
@@ -489,33 +487,32 @@ function ExecutionTrace({
 
   return (
     <div className="signal-track">
-      <svg
+      <div
         aria-label={summary}
-        preserveAspectRatio="none"
-        role="img"
-        viewBox="0 0 100 32"
+        className={`signal-track-plot${points.length === 0 ? " is-empty" : ""}`}
+        role="group"
       >
-        <path className={points.length === 0 ? "is-empty" : ""} d={path} />
         {points.map(({ execution, x, y }) => (
-          <circle
-            className={`signal-execution-point status-${execution.status}`}
-            cx={x}
-            cy={y}
+          <Link
+            aria-label={`${scheduleName}，${formatTime(execution.createdAt)}，${statusLabel(execution.status)}`}
+            className={`signal-execution-link status-${execution.status}`}
             key={execution.id}
-            r="1.65"
-          />
+            style={
+              {
+                "--signal-x": `${x}%`,
+                "--signal-y": `${y}px`,
+                "--signal-stem-top": `${Math.min(y, 16)}px`,
+                "--signal-stem-height": `${Math.abs(y - 16)}px`,
+              } as CSSProperties
+            }
+            title={`${scheduleName} · ${formatTime(execution.createdAt)} · ${statusLabel(execution.status)}`}
+            to={`/executions/${execution.id}`}
+          >
+            <span aria-hidden="true" className="signal-execution-stem" />
+            <span aria-hidden="true" className="signal-execution-point" />
+          </Link>
         ))}
-      </svg>
-      {points.length > 0 ? (
-        <ul className="sr-only">
-          {points.map(({ execution }) => (
-            <li key={execution.id}>
-              {scheduleName}，{formatTime(execution.createdAt)}，
-              {statusLabel(execution.status)}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      </div>
     </div>
   );
 }

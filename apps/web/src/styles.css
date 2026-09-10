@@ -1344,6 +1344,10 @@ body {
   color: var(--primary);
 }
 
+.signal-legend .is-retry {
+  color: var(--warning);
+}
+
 .signal-legend .is-warning {
   color: var(--unknown);
 }
@@ -1540,47 +1544,93 @@ body {
   padding: 0 12px;
 }
 
-.signal-track svg {
+.signal-track-plot {
+  position: relative;
   width: 100%;
   height: 32px;
-  overflow: visible;
 }
 
-.signal-track path {
-  fill: none;
-  stroke: color-mix(in oklch, var(--success) 58%, var(--border));
-  stroke-width: 0.7;
-  vector-effect: non-scaling-stroke;
+.signal-track-plot::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: color-mix(in oklch, var(--border) 72%, var(--muted-foreground));
+  content: "";
 }
 
-.signal-track path.is-empty {
-  stroke: var(--border);
-  stroke-dasharray: 2 3;
+.signal-track-plot.is-empty::before {
+  height: 0;
+  border-top: 1px dashed var(--border);
+  background: none;
+}
+
+.signal-execution-link {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--signal-x);
+  width: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  transform: translateX(-50%);
+}
+
+.signal-execution-stem {
+  position: absolute;
+  top: var(--signal-stem-top);
+  left: 50%;
+  width: 1px;
+  height: var(--signal-stem-height);
+  background: color-mix(in oklch, currentColor 54%, var(--border));
+  transform: translateX(-50%);
 }
 
 .signal-execution-point {
-  fill: var(--muted-foreground);
-  stroke: var(--background);
-  stroke-width: 0.65;
-  vector-effect: non-scaling-stroke;
+  position: absolute;
+  top: var(--signal-y);
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--background);
+  border-radius: 50%;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+  transition:
+    width 150ms ease,
+    height 150ms ease;
 }
 
-.signal-execution-point.status-succeeded {
-  fill: var(--success);
+.signal-execution-link:hover .signal-execution-point {
+  width: 11px;
+  height: 11px;
 }
 
-.signal-execution-point.status-running,
-.signal-execution-point.status-pending {
-  fill: var(--primary);
+.signal-execution-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
 }
 
-.signal-execution-point.status-failed {
-  fill: var(--destructive);
+.signal-execution-link.status-succeeded {
+  color: var(--success);
 }
 
-.signal-execution-point.status-unknown,
-.signal-execution-point.status-retry_wait {
-  fill: var(--unknown);
+.signal-execution-link.status-running,
+.signal-execution-link.status-pending {
+  color: var(--primary);
+}
+
+.signal-execution-link.status-failed {
+  color: var(--destructive);
+}
+
+.signal-execution-link.status-unknown {
+  color: var(--unknown);
+}
+
+.signal-execution-link.status-retry_wait {
+  color: var(--warning);
 }
 
 .signal-task-next {

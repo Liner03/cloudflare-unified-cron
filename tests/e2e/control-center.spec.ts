@@ -43,6 +43,30 @@ test("authenticates and navigates the registered control plane", async ({
   ).toBeVisible();
 });
 
+test("keeps sparse execution markers circular and discrete", async ({
+  page,
+}) => {
+  await login(page, "/");
+  await mockSparseSignal(page);
+  await page.reload();
+
+  const track = page.getByRole("group", {
+    name: "稀疏任务 最近 24 小时有 2 次执行",
+  });
+  await expect(track).toBeVisible();
+  await expect(track.locator("path")).toHaveCount(0);
+
+  const markers = track.locator(".signal-execution-point");
+  await expect(markers).toHaveCount(2);
+  for (const marker of await markers.all()) {
+    const box = await marker.boundingBox();
+    expect(box).not.toBeNull();
+    expect(
+      Math.abs((box?.width ?? 0) - (box?.height ?? 0)),
+    ).toBeLessThanOrEqual(1);
+  }
+});
+
 test("reveals a Registration Token once and never lists its raw value", async ({
   page,
 }) => {
@@ -312,4 +336,119 @@ function rateWindows() {
     execution: { numerator: 0, denominator: 0, rate: null },
     firstAttempt: { numerator: 0, denominator: 0, rate: null },
   }));
+}
+
+async function mockSparseSignal(page: Page) {
+  const now = "2026-09-10T12:00:00.000Z";
+  const earlier = "2026-09-10T06:00:00.000Z";
+  const later = "2026-09-10T10:30:00.000Z";
+  const executions = [
+    {
+      id: "signal-success",
+      scheduleId: "signal-sparse",
+      targetId: "DATA",
+      source: "cron",
+      status: "succeeded",
+      reasonCode: null,
+      scheduledFor: earlier,
+      attemptCount: 1,
+      createdAt: earlier,
+      finishedAt: earlier,
+    },
+    {
+      id: "signal-failure",
+      scheduleId: "signal-sparse",
+      targetId: "DATA",
+      source: "cron",
+      status: "failed",
+      reasonCode: null,
+      scheduledFor: later,
+      attemptCount: 1,
+      createdAt: later,
+      finishedAt: later,
+    },
+  ];
+  const schedule = {
+    id: "signal-sparse",
+    key: "signal-sparse",
+    name: "稀疏任务",
+    description: "Visual regression fixture",
+    targetId: "DATA",
+    action: "healthCheck",
+    actionVersion: 1,
+    cronExpression: "0 */6 * * *",
+    timezone: "UTC",
+    enabled: true,
+    effectiveEnabled: true,
+    blockingReasons: [],
+    declaredEnabled: true,
+    operatorPaused: false,
+    revision: 1,
+    nextRunAt: "2026-09-10T18:00:00.000Z",
+    lastExecution: { status: "failed", at: later },
+  };
+
+  await page.route("**/api/v1/overview", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          schedules: { active_schedules: 1, total_schedules: 1 },
+          executions24h: [
+            { status: "succeeded", count: 1 },
+            { status: "failed", count: 1 },
+          ],
+          recentExecutions: executions,
+          system: {
+            dispatch_paused: 0,
+            last_successful_tick_at: Date.parse(now),
+            last_tick_outcome: "succeeded",
+            last_tick_scheduled_at: Date.parse(now),
+            build_version: "test",
+          },
+          successRates: rateWindows(),
+        },
+        meta: { serverTime: now },
+      },
+    }),
+  );
+  await page.route("**/api/v1/schedules", (route) =>
+    route.fulfill({ json: { data: [schedule] } }),
+  );
+  await page.route(/\/api\/v1\/executions\?/, (route) =>
+    route.fulfill({
+      json: {
+        data: executions,
+        meta: { nextCursor: null, serverTime: now },
+      },
+    }),
+  );
+  await page.route("**/api/v1/targets", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            id: "DATA",
+            label: "Data Worker",
+            binding: "CRON_DATA",
+            service: "worker-data",
+            entrypoint: "CronEntrypoint",
+            protocolVersion: 1,
+            manifestRevision: "data-v1",
+            actions: [],
+            registration: {
+              revision: "test",
+              workerLabel: "Data Worker",
+              registeredAt: now,
+            },
+            state: {
+              enabled: 1,
+              last_check_at: null,
+              last_check_status: null,
+              last_check_message: null,
+            },
+          },
+        ],
+      },
+    }),
+  );
 }
