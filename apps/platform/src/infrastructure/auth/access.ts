@@ -112,9 +112,9 @@ export function clearAdminSessionCookie(env: Env): string {
 
 export function enforceMutationRequest(
   request: Request,
-  publicOrigin: string,
+  env: Pick<Env, "APP_ENV" | "PUBLIC_ORIGIN">,
 ): void {
-  if (request.headers.get("Origin") !== publicOrigin) {
+  if (!isAllowedMutationOrigin(request.headers.get("Origin"), env)) {
     throw new ApiError(403, "ORIGIN_FORBIDDEN", "请求来源不被允许");
   }
   enforceJsonRequest(request);
@@ -137,6 +137,35 @@ function invalidAuthConfiguration(): ApiError {
     "AUTH_CONFIGURATION_INVALID",
     "管理员密码哈希配置无效",
   );
+}
+
+function isAllowedMutationOrigin(
+  suppliedOrigin: string | null,
+  env: Pick<Env, "APP_ENV" | "PUBLIC_ORIGIN">,
+): boolean {
+  const publicOrigin = String(env.PUBLIC_ORIGIN);
+  if (suppliedOrigin === publicOrigin) return true;
+  if (suppliedOrigin === null || String(env.APP_ENV) === "production") {
+    return false;
+  }
+  try {
+    const supplied = new URL(suppliedOrigin);
+    const configured = new URL(publicOrigin);
+    return (
+      supplied.origin === suppliedOrigin &&
+      configured.origin === publicOrigin &&
+      supplied.protocol === configured.protocol &&
+      supplied.port === configured.port &&
+      isLoopbackHostname(supplied.hostname) &&
+      isLoopbackHostname(configured.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname);
 }
 
 function cookieName(env: Env): string {

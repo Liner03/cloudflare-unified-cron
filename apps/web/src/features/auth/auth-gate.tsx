@@ -1,6 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, LoaderCircle, RadioTower } from "lucide-react";
+import {
+  Clock3,
+  Database,
+  KeyRound,
+  LoaderCircle,
+  RadioTower,
+  ShieldCheck,
+  Waypoints,
+  CircleAlert,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { createContext, useContext, useEffect, type ReactNode } from "react";
@@ -108,16 +117,51 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
   const submit = form.handleSubmit((values) => login.mutate(values));
   return (
     <main className="login-page">
+      <section className="login-signal" aria-labelledby="login-context-title">
+        <div className="brand-lockup">
+          <span className="brand-mark" aria-hidden="true" />
+          <span>Worker 控制台</span>
+        </div>
+        <div className="login-signal-copy">
+          <span className="login-signal-icon" aria-hidden="true">
+            <RadioTower size={24} />
+          </span>
+          <h1 id="login-context-title">一个入口，照看所有 Worker 自动任务</h1>
+          <p>
+            从网站到 Cron，再到每次 Execution 与
+            Attempt。异常先被看见，操作始终留下审计证据。
+          </p>
+        </div>
+        <div className="login-signal-evidence" aria-label="平台运行边界">
+          <div>
+            <Clock3 aria-hidden="true" size={17} />
+            <span>
+              <strong>持续调度</strong>
+              <small>浏览器关闭后仍由 Cloudflare Cron 驱动</small>
+            </span>
+          </div>
+          <div>
+            <Database aria-hidden="true" size={17} />
+            <span>
+              <strong>状态持久</strong>
+              <small>D1 保存执行意图、结果与人工操作</small>
+            </span>
+          </div>
+          <div>
+            <Waypoints aria-hidden="true" size={17} />
+            <span>
+              <strong>调用收敛</strong>
+              <small>只通过白名单 Service Binding 访问 Worker</small>
+            </span>
+          </div>
+        </div>
+        <p className="login-signal-meta">Cloudflare Cron · D1 · RPC</p>
+      </section>
       <section className="login-panel" aria-labelledby="login-title">
         <div className="login-form-wrap">
-          <div className="brand-lockup">
-            <span className="brand-mark" aria-hidden="true" />
-            <span>Worker 控制台</span>
-          </div>
           <div className="login-heading">
-            <RadioTower aria-hidden="true" size={22} />
-            <h1 id="login-title">管理员登录</h1>
-            <p>登录后查看所有 Worker 网站的自动任务与运行异常。</p>
+            <h2 id="login-title">管理员登录</h2>
+            <p>使用本地管理员账号进入控制台。</p>
           </div>
           <form
             className="login-form"
@@ -177,9 +221,10 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
               ) : null}
             </div>
             {login.isError ? (
-              <p className="login-error" role="alert">
-                {errorMessage(login.error)}
-              </p>
+              <div className="login-submit-error" role="alert">
+                <CircleAlert aria-hidden="true" size={16} />
+                <span>{errorMessage(login.error)}</span>
+              </div>
             ) : null}
             <Button className="w-full" disabled={login.isPending} size="lg">
               {login.isPending ? (
@@ -190,9 +235,10 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
               {login.isPending ? "正在验证" : "登录控制台"}
             </Button>
           </form>
-          <p className="login-footnote">
-            本地管理员会话与网站 Registration Token 分开授权。
-          </p>
+          <div className="login-footnote">
+            <ShieldCheck aria-hidden="true" size={15} />
+            <p>管理员会话仅用于控制台；Registration Token 独立授权。</p>
+          </div>
         </div>
       </section>
     </main>

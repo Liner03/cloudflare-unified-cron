@@ -1,5 +1,35 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("keeps the login layout balanced across viewport sizes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "管理员登录", exact: true }),
+  ).toBeVisible();
+
+  const viewport = page.viewportSize();
+  const signal = page.locator(".login-signal");
+  const panel = page.locator(".login-panel");
+  const form = page.locator(".login-form-wrap");
+  await expect(signal).toBeVisible();
+
+  const [panelBox, formBox] = await Promise.all([
+    panel.boundingBox(),
+    form.boundingBox(),
+  ]);
+  expect(panelBox).not.toBeNull();
+  expect(formBox).not.toBeNull();
+  if ((viewport?.width ?? 0) >= 900) {
+    expect(panelBox?.x ?? 0).toBeGreaterThan((viewport?.width ?? 0) / 2);
+    expect(formBox?.width ?? 0).toBeGreaterThanOrEqual(360);
+  } else {
+    expect(formBox?.width ?? 0).toBeGreaterThanOrEqual(
+      Math.min((viewport?.width ?? 0) - 48, 420),
+    );
+  }
+});
+
 test("authenticates and navigates the registered control plane", async ({
   page,
 }, testInfo) => {

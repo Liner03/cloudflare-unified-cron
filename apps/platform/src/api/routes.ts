@@ -38,7 +38,7 @@ registerWorkerRegistrationRoute(app);
 app.use("*", authenticate);
 app.use("*", async (context, next) => {
   if (!["GET", "HEAD", "OPTIONS"].includes(context.req.method)) {
-    enforceMutationRequest(context.req.raw, context.env.PUBLIC_ORIGIN);
+    enforceMutationRequest(context.req.raw, context.env);
   }
   await next();
 });

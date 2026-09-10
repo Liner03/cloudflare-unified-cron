@@ -32,7 +32,7 @@ export function registerAuthRoutes(app: ApiRouter): void {
   });
 
   app.post("/auth/login", async (context) => {
-    enforceMutationRequest(context.req.raw, context.env.PUBLIC_ORIGIN);
+    enforceMutationRequest(context.req.raw, context.env);
     const body = await parseMutationBody(context.req.raw);
     const input = parseOrThrow(loginSchema, body.value);
     const loginLimits = new AdminLoginLimitRepository(context.env.DB);
@@ -64,7 +64,7 @@ export function registerAuthRoutes(app: ApiRouter): void {
   });
 
   app.post("/auth/logout", async (context) => {
-    enforceMutationRequest(context.req.raw, context.env.PUBLIC_ORIGIN);
+    enforceMutationRequest(context.req.raw, context.env);
     await deleteAdminSession(context.req.raw, context.env);
     return context.json(
       { data: { authenticated: false, username: null } },

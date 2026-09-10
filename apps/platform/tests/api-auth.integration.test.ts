@@ -34,6 +34,15 @@ describe("local administrator authentication", () => {
     expect(stored?.token_hash).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("accepts the equivalent loopback hostname during local development", async () => {
+    const response = await login(
+      "admin",
+      "test-password",
+      "http://127.0.0.1:8787",
+    );
+    expect(response.status).toBe(200);
+  });
+
   it("uses one generic error for an unknown username or wrong password", async () => {
     for (const [username, password] of [
       ["unknown", "test-password"],
@@ -94,12 +103,16 @@ describe("local administrator authentication", () => {
   });
 });
 
-function login(username: string, password: string): Promise<Response> {
+function login(
+  username: string,
+  password: string,
+  origin = "http://localhost:8787",
+): Promise<Response> {
   return exports.default.fetch(
     new Request("http://localhost/api/v1/auth/login", {
       method: "POST",
       headers: {
-        Origin: "http://localhost:8787",
+        Origin: origin,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ username, password }),
