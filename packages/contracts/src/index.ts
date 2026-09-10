@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export {
+  BoundedJsonError,
+  readBoundedJson,
+  type BoundedJsonErrorReason,
+  type BoundedJsonResult,
+} from "./bounded-json";
+
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -77,6 +84,106 @@ export const retryPolicySchema = z
 
 export type RetryPolicy = z.infer<typeof retryPolicySchema>;
 
+const registrationActionSchema = z
+  .object({
+    name: z.string().trim().min(1).max(128),
+    version: z.number().int().min(1),
+    label: z.string().trim().min(1).max(100),
+    description: z.string().trim().max(500).default(""),
+    idempotent: z.boolean(),
+    examplePayload: jsonValueSchema.optional(),
+  })
+  .strict();
+
+const registrationScheduleSchema = z
+  .object({
+    key: z
+      .string()
+      .trim()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+    name: z.string().trim().min(1).max(100),
+    description: z.string().trim().max(500).default(""),
+    action: z.string().trim().min(1).max(128),
+    actionVersion: z.number().int().min(1),
+    cronExpression: z.string().trim().min(1).max(128),
+    timezone: z.string().trim().min(1).max(128).default("UTC"),
+    enabled: z.boolean().default(true),
+    payload: jsonValueSchema.default({}),
+    retryPolicy: retryPolicySchema,
+    timeoutMs: z.number().int().min(1000).max(30_000).default(30_000),
+    misfirePolicy: z.enum(["coalesce", "skip"]).default("coalesce"),
+    misfireGraceSeconds: z.number().int().min(0).max(86_400).default(300),
+  })
+  .strict();
+
+export const workerRegistrationV1Schema = z
+  .object({
+    protocolVersion: z.literal(1),
+    registrationRevision: z.string().trim().min(1).max(128),
+    worker: z.object({ label: z.string().trim().min(1).max(100) }).strict(),
+    actions: z.array(registrationActionSchema).max(100),
+    schedules: z.array(registrationScheduleSchema).max(50),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const actionKeys = new Set<string>();
+    for (const action of value.actions) {
+      const key = `${action.name}:${action.version}`;
+      if (actionKeys.has(key)) {
+        context.addIssue({
+          code: "custom",
+          path: ["actions"],
+          message: `duplicate action ${key}`,
+        });
+      }
+      actionKeys.add(key);
+    }
+    const scheduleKeys = new Set<string>();
+    for (const schedule of value.schedules) {
+      if (scheduleKeys.has(schedule.key)) {
+        context.addIssue({
+          code: "custom",
+          path: ["schedules"],
+          message: `duplicate schedule key ${schedule.key}`,
+        });
+      }
+      scheduleKeys.add(schedule.key);
+      const actionKey = `${schedule.action}:${schedule.actionVersion}`;
+      if (!actionKeys.has(actionKey)) {
+        context.addIssue({
+          code: "custom",
+          path: ["schedules"],
+          message: `schedule ${schedule.key} references undeclared action ${actionKey}`,
+        });
+        continue;
+      }
+      const action = value.actions.find(
+        (candidate) =>
+          candidate.name === schedule.action &&
+          candidate.version === schedule.actionVersion,
+      );
+      if (
+        action !== undefined &&
+        !action.idempotent &&
+        (schedule.retryPolicy.maxAttempts > 1 ||
+          schedule.retryPolicy.retryOnUnknown)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["schedules"],
+          message: `schedule ${schedule.key} cannot retry a non-idempotent action`,
+        });
+      }
+    }
+  });
+
+export type WorkerRegistrationV1 = z.infer<typeof workerRegistrationV1Schema>;
+export type WorkerRegistrationV1Input = z.input<
+  typeof workerRegistrationV1Schema
+>;
+
 export interface TargetManifest {
   id: string;
   label: string;
@@ -85,14 +192,6 @@ export interface TargetManifest {
   entrypoint: "CronEntrypoint";
   protocolVersion: 1;
   manifestRevision: string;
-  actions: Array<{
-    name: string;
-    version: number;
-    label: string;
-    description?: string;
-    idempotent: boolean;
-    examplePayload?: JsonValue;
-  }>;
 }
 
 export interface CronTargetDescriptionV1 {

@@ -22,6 +22,7 @@
       "migrations_dir": "migrations",
     },
   ],
+  "secrets": { "required": ["ADMIN_PASSWORD_HASH"] },
   "services": [
     {
       "binding": "CRON_DATA",
@@ -31,9 +32,7 @@
   ],
   "vars": {
     "APP_ENV": "production",
-    "AUTH_MODE": "access",
-    "ACCESS_TEAM_DOMAIN": "https://REPLACE_TEAM.cloudflareaccess.com",
-    "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUDIENCE",
+    "ADMIN_USERNAME": "admin",
     "PUBLIC_ORIGIN": "https://cron.example.com",
     "PLATFORM_INSTANCE_ID": "REPLACE_WITH_STABLE_UUID",
     "BUILD_VERSION": "REPLACE_WITH_BUILD_VERSION",

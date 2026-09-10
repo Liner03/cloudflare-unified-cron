@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import "@fontsource-variable/geist";
 import { AppShell } from "@/components/shared/app-shell";
 import { LoadingState } from "@/components/shared/page-states";
+import { AuthGate } from "@/features/auth/auth-gate";
 import "./styles.css";
 
 const OverviewPage = lazy(() =>
@@ -16,11 +17,6 @@ const OverviewPage = lazy(() =>
 const SchedulesPage = lazy(() =>
   import("@/features/schedules/schedules-page").then((module) => ({
     default: module.SchedulesPage,
-  })),
-);
-const ScheduleEditorPage = lazy(() =>
-  import("@/features/schedules/schedule-editor-page").then((module) => ({
-    default: module.ScheduleEditorPage,
   })),
 );
 const ScheduleDetailPage = lazy(() =>
@@ -48,6 +44,11 @@ const SystemPage = lazy(() =>
     default: module.SystemPage,
   })),
 );
+const RegistrationsPage = lazy(() =>
+  import("@/features/registrations/registrations-page").then((module) => ({
+    default: module.RegistrationsPage,
+  })),
+);
 
 function load(element: ReactNode) {
   return (
@@ -73,12 +74,11 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: load(<OverviewPage />) },
       { path: "schedules", element: load(<SchedulesPage />) },
-      { path: "schedules/new", element: load(<ScheduleEditorPage />) },
-      { path: "schedules/:id/edit", element: load(<ScheduleEditorPage />) },
       { path: "schedules/:id", element: load(<ScheduleDetailPage />) },
       { path: "executions", element: load(<ExecutionsPage />) },
       { path: "executions/:id", element: load(<ExecutionDetailPage />) },
       { path: "targets", element: load(<TargetsPage />) },
+      { path: "registrations", element: load(<RegistrationsPage />) },
       { path: "system", element: load(<SystemPage />) },
     ],
   },
@@ -90,7 +90,9 @@ if (!root) throw new Error("Root element is missing");
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AuthGate>
+        <RouterProvider router={router} />
+      </AuthGate>
       <Toaster closeButton position="top-right" richColors />
     </QueryClientProvider>
   </StrictMode>,

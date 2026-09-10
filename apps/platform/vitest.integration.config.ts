@@ -15,7 +15,6 @@ export default defineConfig(async () => {
     ],
     test: {
       include: ["tests/**/*.integration.test.ts"],
-      exclude: ["tests/api-auth.integration.test.ts"],
       setupFiles: ["./tests/apply-migrations.ts"],
       deps: {
         optimizer: {

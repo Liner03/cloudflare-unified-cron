@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./registration": "./src/registration-client.ts",
     "./entrypoint": "./src/entrypoint.ts"
   },
   "scripts": {

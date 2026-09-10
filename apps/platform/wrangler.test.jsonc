@@ -14,9 +14,8 @@
   ],
   "vars": {
     "APP_ENV": "test",
-    "AUTH_MODE": "local",
-    "ACCESS_TEAM_DOMAIN": "https://test.cloudflareaccess.com",
-    "ACCESS_AUD": "test",
+    "ADMIN_USERNAME": "admin",
+    "ADMIN_PASSWORD_HASH": "pbkdf2-sha256$600000$MDEyMzQ1Njc4OWFiY2RlZg$YVNTOas3Ktj9Bxo0o7TgbDWqVSP6iO1YpNUrQDQGjgA",
     "PUBLIC_ORIGIN": "http://localhost:8787",
     "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000003",
     "BUILD_VERSION": "test",

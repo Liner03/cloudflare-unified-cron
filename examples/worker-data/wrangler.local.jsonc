@@ -12,6 +12,9 @@
       "migrations_dir": "migrations",
     },
   ],
-  "vars": { "BUILD_ID": "local" },
+  "vars": {
+    "BUILD_ID": "local",
+    "PLATFORM_REGISTRATION_URL": "http://127.0.0.1:8787/api/v1/registration",
+  },
   "observability": { "enabled": true },
 }

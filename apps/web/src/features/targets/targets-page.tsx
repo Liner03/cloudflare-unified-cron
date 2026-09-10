@@ -45,7 +45,7 @@ export function TargetsPage() {
   return (
     <>
       <PageHeader
-        description="物理 binding、service、entrypoint 与 Action 由部署 manifest 固定；D1 只保存启停与上次无副作用检查。"
+        description="部署 manifest 只预授权物理 Service Binding；Actions 与计划来自该 Worker 的最新 Registration。"
         title="目标服务"
       />
       {query.isLoading ? (
@@ -99,6 +99,17 @@ export function TargetsPage() {
                     <dd className="mono">{target.entrypoint}</dd>
                     <dt>Manifest</dt>
                     <dd className="mono">{target.manifestRevision}</dd>
+                    <dt>Registration</dt>
+                    <dd className="flex flex-wrap items-center gap-2">
+                      <StatusBadge
+                        status={
+                          target.registration ? "registered" : "unregistered"
+                        }
+                      />
+                      <span className="mono min-w-0 break-all">
+                        {target.registration?.revision ?? "尚未注册"}
+                      </span>
+                    </dd>
                     <dt>上次检查</dt>
                     <dd>
                       <div className="flex flex-wrap items-center gap-2">
@@ -112,24 +123,30 @@ export function TargetsPage() {
                   <div className="mt-5 border-t border-border pt-4">
                     <h3 className="mb-3 text-sm font-semibold">Actions</h3>
                     <div className="grid gap-2">
-                      {target.actions.map((action) => (
-                        <div
-                          className="flex items-center justify-between gap-4 rounded-[10px] bg-muted/55 px-3 py-2"
-                          key={`${action.name}:${action.version}`}
-                        >
-                          <div>
-                            <code className="mono text-xs font-semibold">
-                              {action.name} / v{action.version}
-                            </code>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {action.description ?? "无说明"}
-                            </p>
+                      {target.actions.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          Worker 尚未发布 Action 声明。
+                        </p>
+                      ) : (
+                        target.actions.map((action) => (
+                          <div
+                            className="flex items-center justify-between gap-4 rounded-[10px] bg-muted/55 px-3 py-2"
+                            key={`${action.name}:${action.version}`}
+                          >
+                            <div>
+                              <code className="mono text-xs font-semibold">
+                                {action.name} / v{action.version}
+                              </code>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {action.description ?? "无说明"}
+                              </p>
+                            </div>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {action.idempotent ? "幂等声明" : "非幂等"}
+                            </span>
                           </div>
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {action.idempotent ? "幂等声明" : "非幂等"}
-                          </span>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
                   <div className="mt-5 flex flex-wrap gap-2">

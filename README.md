@@ -14,10 +14,11 @@ Platform Worker ── D1（计划、执行、租约、重试、审计）
         │
         └── Service Binding RPC ──► 业务 Worker / CronEntrypoint
 
-Administrator ── Cloudflare Access ──► React SPA + /api/v1
+Registrant Worker ── scoped token ──► PUT /api/v1/registration
+Administrator ── local session ──► React SPA + operator API
 ```
 
-平台只在 `scheduled()` 中派发。Web 的 Run now、Retry 和 Run again 先把意图写入 D1，并返回 202；它们不会在浏览器请求中直接调用业务 Worker。
+平台只在 `scheduled()` 中派发。Web 的 Retry 和 Run again 先把意图写入 D1，并返回 202；它们不会在浏览器请求中直接调用业务 Worker。Schedule 本身没有人工 Run now 入口。
 
 ## 本地运行
 
@@ -25,10 +26,16 @@ Administrator ── Cloudflare Access ──► React SPA + /api/v1
 
 ```bash
 pnpm install --frozen-lockfile
+cp apps/platform/.dev.vars.example apps/platform/.dev.vars
+pnpm --filter @unified-cron/platform auth:hash-password
+# 将输出写入 apps/platform/.dev.vars 的 ADMIN_PASSWORD_HASH
 pnpm db:migrate:local
 pnpm seed:local
 pnpm dev
 ```
+
+登录用户名默认为 `admin`，密码只以 PBKDF2-SHA256 哈希保存在本地
+`.dev.vars` 或生产 Worker Secret 中。仓库不包含可用的默认管理员密码。
 
 本地地址：
 
@@ -49,7 +56,7 @@ Wrangler 4.129.1 同时兼容 `/__scheduled`，但项目文档与测试以 `/cdn
 ```text
 pnpm dev                  Vite + 平台 Worker + 示例 Worker
 pnpm db:migrate:local     迁移示例业务 D1 与平台 D1
-pnpm seed:local           幂等写入示例 Target 与暂停 Schedule
+pnpm seed:local           幂等写入示例物理 Target（不创建可见 Schedule）
 pnpm targets:sync:local   只同步部署 Target 元数据
 pnpm lint                 ESLint，包括 no-floating-promises
 pnpm typecheck            全 workspace TypeScript strict
@@ -72,10 +79,10 @@ pnpm targets:sync:remote
 
 ## Workspace
 
-- `apps/platform`：Hono API、D1 repository、Tick、RPC 与 Access JWT 验证。
+- `apps/platform`：Hono API、D1 repository、Tick、RPC、本地管理员认证与注册接口。
 - `apps/web`：React/shadcn 控制台，TanStack Query/Table 与 React Hook Form。
 - `packages/contracts`：V1 JSON 协议与运行时 schema。
-- `packages/worker-sdk`：Action allowlist、deadline、错误分类与命名 Entrypoint 基类。
+- `packages/worker-sdk`：Action allowlist、Registration client、deadline、错误分类与命名 Entrypoint 基类。
 - `examples/worker-data`：保留原 fetch 的示例业务 Worker，以及业务侧持久化幂等。
 - `tests/e2e`：Playwright 桌面和移动闭环。
 - `docs`：协议、Cron 语义、部署、运维与验证证据。

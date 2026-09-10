@@ -4,6 +4,7 @@ import {
   retryDelayMs,
   systemClock,
 } from "../src/domain/model";
+import { makeSuccessDecision } from "../src/application/tick";
 
 const policy = {
   maxAttempts: 3,
@@ -12,6 +13,29 @@ const policy = {
 };
 
 describe("retry policy", () => {
+  it("persists bounded Worker output with the success summary", () => {
+    const decision = makeSuccessDecision(
+      {
+        protocolVersion: 1,
+        executionId: "execution-1",
+        attemptId: "attempt-1",
+        ok: true,
+        summary: "Processed two records",
+        output: { processed: 2, ids: ["a", "b"] },
+        targetBuildId: "worker-build-1",
+      },
+      "attempt-1",
+      1000,
+    );
+
+    expect(JSON.parse(decision.resultJson!)).toEqual({
+      summary: "Processed two records",
+      output: { processed: 2, ids: ["a", "b"] },
+      attemptId: "attempt-1",
+    });
+    expect(decision.targetBuildId).toBe("worker-build-1");
+  });
+
   it("uses the delay following the completed attempt", () => {
     expect(retryDelayMs(policy, 1)).toBe(60_000);
     expect(retryDelayMs(policy, 2)).toBe(300_000);

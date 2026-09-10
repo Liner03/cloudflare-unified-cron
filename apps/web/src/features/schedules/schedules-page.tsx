@@ -1,13 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { CalendarPlus, Play, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form-controls";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -25,13 +24,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { apiGet, apiMutate, errorMessage } from "@/lib/api-client";
-import {
-  executionMutationSchema,
-  schedulesSchema,
-  type ScheduleSummary,
-} from "@/lib/api-schemas";
-import { formatTime } from "@/lib/format";
+import { apiGet } from "@/lib/api-client";
+import { schedulesSchema, type ScheduleSummary } from "@/lib/api-schemas";
+import { formatScheduleBlockingReasons, formatTime } from "@/lib/format";
 
 const columnHelper = createColumnHelper<ScheduleSummary>();
 
@@ -39,7 +34,6 @@ export function SchedulesPage() {
   const [params, setParams] = useSearchParams();
   const search = params.get("search") ?? "";
   const enabled = params.get("enabled") ?? "";
-  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["schedules", search, enabled],
     queryFn: ({ signal }) =>
@@ -49,19 +43,6 @@ export function SchedulesPage() {
         signal,
       ),
   });
-  const run = useMutation({
-    mutationFn: (id: string) =>
-      apiMutate(`/api/v1/schedules/${id}/run`, {}, executionMutationSchema),
-    onSuccess: async ({ data }) => {
-      await queryClient.invalidateQueries({ queryKey: ["schedules"] });
-      toast.success("执行意图已保存", {
-        description: `将在可用 Tick 中领取：${data.executionId}`,
-      });
-    },
-    onError: (error) =>
-      toast.error("无法立即安排", { description: errorMessage(error) }),
-  });
-
   const columns = [
     columnHelper.accessor("name", {
       header: "计划",
@@ -116,34 +97,29 @@ export function SchedulesPage() {
       header: "最近 / 状态",
       cell: ({ row }) => (
         <div className="grid justify-items-start gap-1.5">
+          <StatusBadge
+            status={
+              row.original.effectiveEnabled ? "enabled" : "schedule_paused"
+            }
+          />
           {row.original.lastExecution ? (
             <StatusBadge status={row.original.lastExecution.status} />
           ) : (
             <span className="text-xs text-muted-foreground">尚未运行</span>
           )}
           <span className="text-xs text-muted-foreground">
-            {row.original.enabled ? "已启用" : "已暂停"}
+            {formatScheduleBlockingReasons(row.original.blockingReasons)}
           </span>
         </div>
       ),
     }),
     columnHelper.display({
       id: "actions",
-      header: "",
+      header: "操作",
       cell: ({ row }) => (
         <div className="flex justify-end gap-2">
           <Button asChild size="sm" variant="ghost">
             <Link to={`/schedules/${row.original.id}`}>查看</Link>
-          </Button>
-          <Button
-            aria-label={`立即安排 ${row.original.name}`}
-            disabled={run.isPending}
-            onClick={() => run.mutate(row.original.id)}
-            size="sm"
-            variant="outline"
-          >
-            <Play size={13} />
-            安排
           </Button>
         </div>
       ),
@@ -158,15 +134,7 @@ export function SchedulesPage() {
   return (
     <>
       <PageHeader
-        action={
-          <Button asChild>
-            <Link to="/schedules/new">
-              <CalendarPlus size={16} />
-              新建计划
-            </Link>
-          </Button>
-        }
-        description="每个计划绑定一个白名单 Action。暂停只停止新的 cron 发生，已有执行意图不会被删除。"
+        description="计划配置来自业务 Worker 的完整 Registration；管理员只能查看声明或设置暂停覆盖。"
         title="计划"
       />
       <div className="toolbar" role="search">
@@ -199,8 +167,8 @@ export function SchedulesPage() {
           value={enabled}
         >
           <option value="">全部状态</option>
-          <option value="true">已启用</option>
-          <option value="false">已暂停</option>
+          <option value="true">当前可派发</option>
+          <option value="false">当前被阻止</option>
         </Select>
       </div>
       <section className="ledger-section">
@@ -214,13 +182,13 @@ export function SchedulesPage() {
           <EmptyState
             action={
               <Button asChild size="sm" variant="outline">
-                <Link to="/schedules/new">创建第一个计划</Link>
+                <Link to="/registrations">查看注册状态</Link>
               </Button>
             }
             description={
               search || enabled
-                ? "调整筛选条件，或创建新的逻辑计划。"
-                : "Target manifest 同步后即可建立暂停计划并预览时间。"
+                ? "调整筛选条件，或检查 Worker 最新 Registration。"
+                : "为 Target 签发 Token，并由业务 Worker 发布完整 Registration。"
             }
             title={search || enabled ? "没有匹配的计划" : "尚无 Schedule"}
           />

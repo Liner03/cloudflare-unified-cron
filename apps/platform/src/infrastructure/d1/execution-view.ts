@@ -1,8 +1,7 @@
 import { jsonValueSchema, type JsonValue } from "@unified-cron/contracts";
 import { z } from "zod";
-import { parseSnapshot } from "../infrastructure/d1/execution-repository";
-import { ApiError } from "./errors";
-import { toIso } from "./http-support";
+import { parseSnapshot } from "./execution-repository";
+import { DomainError } from "../../domain/error";
 
 export function serializeExecutionSummary(value: unknown) {
   const row = z
@@ -82,7 +81,11 @@ export async function readExecution(
     .bind(id)
     .first();
   if (!row) {
-    throw new ApiError(404, "EXECUTION_NOT_FOUND", "执行不存在或已清理");
+    throw new DomainError(
+      "not_found",
+      "EXECUTION_NOT_FOUND",
+      "执行不存在或已清理",
+    );
   }
   return executionRowSchema.parse(row);
 }
@@ -155,4 +158,8 @@ export function parseSnapshotJson(value: string) {
 
 export function parseJson(value: string): JsonValue {
   return jsonValueSchema.parse(JSON.parse(value));
+}
+
+function toIso(value: number | null): string | null {
+  return value === null ? null : new Date(value).toISOString();
 }

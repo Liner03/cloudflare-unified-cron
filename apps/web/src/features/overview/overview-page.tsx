@@ -2,15 +2,18 @@ import { useGSAP } from "@gsap/react";
 import { useQuery } from "@tanstack/react-query";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import {
-  ArrowDownRight,
-  ArrowRight,
-  CalendarPlus,
-  RadioTower,
-} from "lucide-react";
+import { ArrowDownRight, ArrowRight, KeyRound, RadioTower } from "lucide-react";
 import { useRef } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ErrorState, LoadingState } from "@/components/shared/page-states";
 import { apiGet } from "@/lib/api-client";
@@ -115,6 +118,7 @@ export function OverviewPage() {
     data.executions24h.map((row) => [row.status, row.count]),
   );
   const recent = data.recentExecutions.slice(0, 5);
+  const rate7d = data.successRates.find((value) => value.window === "7d");
 
   return (
     <div className="overview-experience" ref={scope}>
@@ -131,8 +135,8 @@ export function OverviewPage() {
           </p>
           <div className="overview-hero-actions">
             <Button asChild size="lg">
-              <Link to="/schedules/new">
-                <CalendarPlus size={17} /> 新建计划
+              <Link to="/registrations">
+                <KeyRound size={17} /> 配置 Worker 注册
               </Link>
             </Button>
             <Button
@@ -260,20 +264,62 @@ export function OverviewPage() {
 
           <article className="bento-tertiary col-span-5 row-span-1">
             <div>
-              <h3>有界派发</h3>
-              <p>每 Tick 最多物化 2 个、派发 2 个 Attempt</p>
+              <h3>7 天执行成功率</h3>
+              <p>
+                {rate7d?.execution.denominator ?? 0} 个 resolved
+                Execution；跳过、取消和活跃状态不计入
+              </p>
             </div>
-            <div className="capacity-lines" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
+            <div className="bento-value tabular">
+              {formatRate(rate7d?.execution.rate ?? null)}
+              <small>
+                首次成功 {formatRate(rate7d?.firstAttempt.rate ?? null)}
+              </small>
             </div>
-            <Link className="bento-link" to="/system">
-              查看预算与平台状态 <ArrowRight size={14} />
+            <Link className="bento-link" to="/executions">
+              查看执行样本 <ArrowRight size={14} />
             </Link>
           </article>
+        </div>
+        <div className="success-rate-ledger">
+          <div className="ledger-heading">
+            <div>
+              <h3 className="text-sm font-semibold">成功率窗口</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                resolved = succeeded + failed +
+                unknown；跳过、取消和活跃状态不计入。
+              </p>
+            </div>
+          </div>
+          <div className="table-wrap">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>窗口</TableHead>
+                  <TableHead>Execution success</TableHead>
+                  <TableHead>First-attempt success</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.successRates.map((value) => (
+                  <TableRow key={value.window}>
+                    <TableCell className="font-semibold">
+                      {value.window}
+                    </TableCell>
+                    <TableCell className="tabular">
+                      {formatRate(value.execution.rate)} ·{" "}
+                      {value.execution.numerator}/{value.execution.denominator}
+                    </TableCell>
+                    <TableCell className="tabular">
+                      {formatRate(value.firstAttempt.rate)} ·{" "}
+                      {value.firstAttempt.numerator}/
+                      {value.firstAttempt.denominator}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </section>
 
@@ -352,9 +398,9 @@ export function OverviewPage() {
               <span className="text-sm text-muted-foreground">
                 尚无执行记录
               </span>
-              <h3>创建一个暂停计划，再进行受控的立即安排。</h3>
+              <h3>等待 Worker 发布第一个 Registration。</h3>
               <Button asChild>
-                <Link to="/schedules/new">新建计划</Link>
+                <Link to="/registrations">查看注册状态</Link>
               </Button>
             </article>
           ) : (
@@ -392,12 +438,13 @@ export function OverviewPage() {
         <div>
           <h2>先保存意图，再让 Tick 安全领取。</h2>
           <p>
-            计划编辑、人工运行和重试都不会在浏览器请求中直接调用业务 Worker。
+            Worker 声明计划；Retry 和 Run again 都不会在浏览器请求中直接调用业务
+            Worker。
           </p>
         </div>
         <div className="overview-action-buttons">
           <Button asChild className="action-primary" size="lg">
-            <Link to="/schedules/new">建立第一个计划</Link>
+            <Link to="/registrations">签发 Registration Token</Link>
           </Button>
           <Button
             asChild
@@ -418,4 +465,13 @@ export function OverviewPage() {
       </footer>
     </div>
   );
+}
+
+function formatRate(value: number | null): string {
+  return value === null
+    ? "—"
+    : new Intl.NumberFormat("zh-CN", {
+        style: "percent",
+        maximumFractionDigits: 1,
+      }).format(value);
 }

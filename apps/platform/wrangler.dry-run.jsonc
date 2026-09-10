@@ -30,9 +30,7 @@
   ],
   "vars": {
     "APP_ENV": "development",
-    "AUTH_MODE": "local",
-    "ACCESS_TEAM_DOMAIN": "https://dry-run.cloudflareaccess.com",
-    "ACCESS_AUD": "dry-run",
+    "ADMIN_USERNAME": "admin",
     "PUBLIC_ORIGIN": "http://127.0.0.1:5173",
     "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000004",
     "BUILD_VERSION": "dry-run",

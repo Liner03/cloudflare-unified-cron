@@ -12,7 +12,7 @@ web
 
 ## Users
 
-推导自实施规格：单一 Cloudflare Account 的管理员和当值工程师。他们在桌面或移动浏览器中建立、暂停、恢复和审核运行业务 Worker 的逻辑 Cron 计划，并在失败或结果未知时做风险明确的人工处置。
+推导自实施规格：单一 Cloudflare Account 的管理员和当值工程师。他们在桌面或移动浏览器中观察、暂停、恢复和审核运行业务 Worker 声明的逻辑 Cron 计划，并在失败或结果未知时做风险明确的人工处置。
 
 ## Product Purpose
 
@@ -24,7 +24,7 @@ web
 
 ## Operating Context
 
-管理员主要查看 Overview、Schedules、Executions、Targets 和 System；创建计划时从部署白名单选择 Target/Action，通过服务端 Cron preview 校验时区；故障时对 Attempt 时间线、错误和幂等风险做判断。生产入口由 Cloudflare Access 保护。
+管理员主要查看 Overview、Schedules、Executions、Targets 和 System；为预授权 Target 生成 Registration Token，并在故障时对 Attempt 时间线、错误和幂等风险做判断。业务 Worker 通过注册接口声明 Action 与 Cron，控制台不再手工创建或编辑声明。应用使用本地管理员登录，Cloudflare Access 可作为生产入口的可选外层保护。
 
 ## Capabilities and Constraints
 
@@ -33,6 +33,8 @@ web
 - 五字段 Unix Cron 数字子集，明确区别 Cloudflare 原生数字星期语义。
 - Execution 与 Attempt 分离；Retry 保持 Execution/幂等键，Run again 创建新身份。
 - 超时和连接中断为 `unknown`；非幂等 Action 禁止自动重试。
+- Registrant Worker 通过受限 Token 提交完整期望状态；Operator override 始终优先且不能被注册覆盖。
+- 成功率分别展示 Execution 最终成功率与首次 Attempt 成功率，并包含窗口和样本量。
 - 不加入 KV、Queues、Durable Objects、Workflows、Redis、跨账号 HTTP 或任意代码执行。
 
 ## Brand Commitments
@@ -48,7 +50,7 @@ web
 - 状态真实：unknown、skipped、业务失败和平台故障始终分开。
 - 风险可见：人工 Retry、Run again 和核实未知结果有不同身份与清晰确认。
 - 控制持久：浏览器只提交意图，D1 和 scheduled handler 承担执行连续性。
-- 能力收敛：所有 Target/Action 来自部署白名单，不接受任意 URL 或方法。
+- 能力收敛：物理 Target 来自部署白名单，Action 来自该 Target 的受限 Registration；不接受任意 URL 或方法。
 - 运维优先：最重要的健康、阻塞、到期和失败信息能在数秒内被扫描。
 
 ## Accessibility & Inclusion

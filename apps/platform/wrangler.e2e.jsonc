@@ -1,0 +1,31 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "unified-cron-platform-e2e",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "unified-cron-platform-local-db",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "services": [
+    {
+      "binding": "CRON_DATA",
+      "service": "worker-data-local",
+      "entrypoint": "CronEntrypoint",
+    },
+  ],
+  "vars": {
+    "APP_ENV": "test",
+    "ADMIN_USERNAME": "admin",
+    "ADMIN_PASSWORD_HASH": "pbkdf2-sha256$600000$MDEyMzQ1Njc4OWFiY2RlZg$YVNTOas3Ktj9Bxo0o7TgbDWqVSP6iO1YpNUrQDQGjgA",
+    "PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+    "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000005",
+    "BUILD_VERSION": "e2e",
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+}

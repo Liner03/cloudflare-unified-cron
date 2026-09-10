@@ -17,8 +17,17 @@ export const executionSummarySchema = z.object({
 
 export type ExecutionSummary = z.infer<typeof executionSummarySchema>;
 
+export const scheduleBlockingReasonSchema = z.enum([
+  "declared_disabled",
+  "operator_paused",
+  "invalid_configuration",
+  "target_disabled",
+  "dispatch_paused",
+]);
+
 export const scheduleSummarySchema = z.object({
   id: z.string(),
+  key: z.string(),
   name: z.string(),
   description: z.string(),
   targetId: z.string(),
@@ -27,6 +36,10 @@ export const scheduleSummarySchema = z.object({
   cronExpression: z.string(),
   timezone: z.string(),
   enabled: z.boolean(),
+  effectiveEnabled: z.boolean(),
+  blockingReasons: z.array(scheduleBlockingReasonSchema),
+  declaredEnabled: z.boolean(),
+  operatorPaused: z.boolean(),
   revision: z.number(),
   nextRunAt: z.string().nullable(),
   lastExecution: z
@@ -54,6 +67,23 @@ export const overviewSchema = z.object({
       })
       .passthrough()
       .nullable(),
+    successRates: z.array(
+      z.object({
+        window: z.enum(["24h", "7d", "30d"]),
+        from: z.string(),
+        to: z.string(),
+        execution: z.object({
+          numerator: z.number(),
+          denominator: z.number(),
+          rate: z.number().nullable(),
+        }),
+        firstAttempt: z.object({
+          numerator: z.number(),
+          denominator: z.number(),
+          rate: z.number().nullable(),
+        }),
+      }),
+    ),
   }),
   meta: z.object({ serverTime: z.string() }),
 });
@@ -65,6 +95,8 @@ export const schedulesSchema = z.object({
 export const scheduleDetailSchema = z.object({
   data: scheduleSummarySchema.omit({ lastExecution: true }).extend({
     archivedAt: z.string().nullable(),
+    retiredAt: z.string().nullable(),
+    managedByRegistration: z.boolean(),
     payload: z.unknown(),
     retryPolicy: z.object({
       maxAttempts: z.number(),
@@ -100,6 +132,13 @@ export const targetsSchema = z.object({
           examplePayload: z.unknown().optional(),
         }),
       ),
+      registration: z
+        .object({
+          revision: z.string(),
+          workerLabel: z.string(),
+          registeredAt: z.string(),
+        })
+        .nullable(),
       state: z
         .object({
           enabled: z.number(),
@@ -114,6 +153,52 @@ export const targetsSchema = z.object({
 });
 
 export type Target = z.infer<typeof targetsSchema>["data"][number];
+
+export const authSessionSchema = z.object({
+  data: z.object({
+    authenticated: z.boolean(),
+    username: z.string().nullable(),
+    expiresAt: z.string().optional(),
+  }),
+});
+
+const registrationTokenSchema = z.object({
+  id: z.string(),
+  targetId: z.string(),
+  label: z.string(),
+  scope: z.literal("registration:write"),
+  expiresAt: z.string(),
+  lastUsedAt: z.string().nullable(),
+  revokedAt: z.string().nullable(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+  rotatedFromId: z.string().nullable(),
+  replacedById: z.string().nullable(),
+  registration: z
+    .object({
+      revision: z.string(),
+      workerLabel: z.string().nullable(),
+      registeredAt: z.string().nullable(),
+    })
+    .nullable(),
+});
+
+export type RegistrationToken = z.infer<typeof registrationTokenSchema>;
+
+export const registrationTokensSchema = z.object({
+  data: z.array(registrationTokenSchema),
+});
+
+export const issuedRegistrationTokenSchema = z.object({
+  data: z.object({
+    id: z.string(),
+    targetId: z.string(),
+    label: z.string(),
+    token: z.string(),
+    expiresAt: z.string(),
+    rotatedFromId: z.string().optional(),
+  }),
+});
 
 export const executionsSchema = z.object({
   data: z.array(executionSummarySchema),

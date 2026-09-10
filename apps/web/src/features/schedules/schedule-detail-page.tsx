@@ -1,13 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Archive,
-  ArrowLeft,
-  CirclePause,
-  CirclePlay,
-  Pencil,
-  Play,
-} from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, CirclePause, CirclePlay } from "lucide-react";
+import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ActionConfirm } from "@/components/shared/action-confirm";
 import {
@@ -27,16 +20,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiGet, apiMutate, errorMessage } from "@/lib/api-client";
+import { scheduleDetailSchema, stateMutationSchema } from "@/lib/api-schemas";
 import {
-  executionMutationSchema,
-  scheduleDetailSchema,
-  stateMutationSchema,
-} from "@/lib/api-schemas";
-import { formatTime, shortId } from "@/lib/format";
+  formatScheduleBlockingReasons,
+  formatTime,
+  shortId,
+} from "@/lib/format";
 
 export function ScheduleDetailPage() {
   const { id = "" } = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["schedule", id],
@@ -45,16 +37,9 @@ export function ScheduleDetailPage() {
     enabled: id.length > 0,
   });
   const mutation = useMutation({
-    mutationFn: async (operation: "run" | "pause" | "resume" | "archive") => {
+    mutationFn: async (operation: "pause" | "resume") => {
       const schedule = query.data?.data;
       if (!schedule) throw new Error("Schedule 尚未加载");
-      if (operation === "run") {
-        return apiMutate(
-          `/api/v1/schedules/${id}/run`,
-          {},
-          executionMutationSchema,
-        );
-      }
       return apiMutate(
         `/api/v1/schedules/${id}/${operation}`,
         {},
@@ -64,23 +49,15 @@ export function ScheduleDetailPage() {
         },
       );
     },
-    onSuccess: async (result, operation) => {
+    onSuccess: async (_result, operation) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["schedule", id] }),
         queryClient.invalidateQueries({ queryKey: ["schedules"] }),
         queryClient.invalidateQueries({ queryKey: ["overview"] }),
       ]);
-      if (operation === "archive") {
-        toast.success("Schedule 已归档");
-        void navigate("/schedules");
-      } else if (operation === "run" && "executionId" in result.data) {
-        toast.success("执行意图已保存");
-        void navigate(`/executions/${String(result.data.executionId)}`);
-      } else {
-        toast.success(
-          operation === "pause" ? "Schedule 已暂停" : "Schedule 已恢复",
-        );
-      }
+      toast.success(
+        operation === "pause" ? "Schedule 已暂停" : "Schedule 已恢复",
+      );
     },
     onError: (error) =>
       toast.error("操作未完成", { description: errorMessage(error) }),
@@ -107,26 +84,10 @@ export function ScheduleDetailPage() {
         title={schedule.name}
       />
       <div className="mb-5 flex flex-wrap gap-2">
-        <Button asChild variant="outline">
-          <Link to={`/schedules/${schedule.id}/edit`}>
-            <Pencil size={15} /> 编辑
-          </Link>
-        </Button>
-        <ActionConfirm
-          confirmLabel="立即安排"
-          description="这会创建新的 Execution 和新的幂等键。HTTP 请求只保存意图，业务 RPC 将由后续可用 Tick 领取。"
-          onConfirm={() => mutation.mutate("run")}
-          title="安排一次新的人工运行？"
-          trigger={
-            <Button disabled={mutation.isPending}>
-              <Play size={15} /> 立即安排
-            </Button>
-          }
-        />
-        {schedule.enabled ? (
+        {!schedule.operatorPaused ? (
           <ActionConfirm
             confirmLabel="暂停计划"
-            description="暂停只停止新的 cron Execution；现有 pending、retry_wait、running 或 unknown 不会被删除。"
+            description="管理员覆盖会持续存在，后续 Registration 不能清除；现有 Execution 不会被删除。"
             onConfirm={() => mutation.mutate("pause")}
             title="暂停新的定时发生？"
             trigger={
@@ -138,7 +99,7 @@ export function ScheduleDetailPage() {
         ) : (
           <ActionConfirm
             confirmLabel="恢复计划"
-            description="恢复时会从当前时间重新计算 next_run_at，默认不追补暂停期间的发生。"
+            description="只清除管理员覆盖。若 Worker 声明为停用，Schedule 仍不会产生新执行。"
             onConfirm={() => mutation.mutate("resume")}
             title="恢复定时计划？"
             trigger={
@@ -148,18 +109,6 @@ export function ScheduleDetailPage() {
             }
           />
         )}
-        <ActionConfirm
-          confirmLabel="归档"
-          danger
-          description="归档是软删除；存在 active 或 unknown Execution 时服务端会拒绝。历史记录继续保留。"
-          onConfirm={() => mutation.mutate("archive")}
-          title="归档这个 Schedule？"
-          trigger={
-            <Button disabled={mutation.isPending} variant="ghost">
-              <Archive size={15} /> 归档
-            </Button>
-          }
-        />
       </div>
 
       <div className="detail-grid">
@@ -167,7 +116,7 @@ export function ScheduleDetailPage() {
           <CardHeader>
             <CardTitle>配置快照</CardTitle>
             <StatusBadge
-              status={schedule.enabled ? "enabled" : "schedule_paused"}
+              status={schedule.effectiveEnabled ? "enabled" : "schedule_paused"}
             />
           </CardHeader>
           <CardContent>
@@ -183,6 +132,15 @@ export function ScheduleDetailPage() {
                 {schedule.targetId} / {schedule.action} / v
                 {schedule.actionVersion}
               </dd>
+              <dt>Registration key</dt>
+              <dd className="mono">{schedule.key}</dd>
+              <dt>声明 / 覆盖</dt>
+              <dd>
+                {schedule.declaredEnabled ? "Worker 启用" : "Worker 停用"} ·{" "}
+                {schedule.operatorPaused ? "管理员暂停" : "无管理员覆盖"}
+              </dd>
+              <dt>有效状态</dt>
+              <dd>{formatScheduleBlockingReasons(schedule.blockingReasons)}</dd>
               <dt>Retry</dt>
               <dd>
                 共 {schedule.retryPolicy.maxAttempts} 次 · delay [
@@ -218,7 +176,7 @@ export function ScheduleDetailPage() {
           <CardContent className="px-0 pb-0">
             {schedule.recentExecutions.length === 0 ? (
               <div className="p-5 text-sm text-muted-foreground">
-                尚无执行记录。可先进行一次受控的立即安排。
+                尚无执行记录。等待 Worker 声明的下一次定时发生。
               </div>
             ) : (
               <Table>

@@ -160,9 +160,9 @@ export function SystemPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm leading-6 text-muted-foreground">
-              生产域由 Cloudflare Access 保护；API 再校验
-              JWT、Origin、JSON、Idempotency-Key 与输入 schema。workers.dev 和
-              preview URL 在生产配置中关闭。
+              平台使用本地管理员 Session；业务 Worker 使用绑定单一 Target 的
+              Registration Token。管理员写操作校验
+              Origin，机器注册不共享浏览器权限。
             </p>
           </CardContent>
         </Card>

@@ -10,6 +10,13 @@ import {
 } from "@unified-cron/contracts";
 import type { z } from "zod";
 
+export {
+  RegistrationError,
+  createRegistrationClient,
+  type RegistrationClient,
+  type RegistrationResult,
+} from "./registration-client";
+
 export class CronError extends Error {
   private constructor(
     readonly code: string,

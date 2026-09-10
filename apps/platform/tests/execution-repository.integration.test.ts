@@ -22,6 +22,10 @@ describe("ExecutionRepository on D1", () => {
       env.DB.prepare("DELETE FROM attempts"),
       env.DB.prepare("DELETE FROM executions"),
       env.DB.prepare("DELETE FROM schedules"),
+      env.DB.prepare("DELETE FROM registered_actions"),
+      env.DB.prepare("DELETE FROM registration_revisions"),
+      env.DB.prepare("DELETE FROM registrations"),
+      env.DB.prepare("DELETE FROM registration_tokens"),
       env.DB.prepare("DELETE FROM targets"),
       env.DB.prepare(
         "UPDATE platform_state SET dispatch_paused = 0, last_tick_id = NULL, updated_at = 0 WHERE id = 1",
@@ -34,16 +38,25 @@ describe("ExecutionRepository on D1", () => {
       .bind(now, now)
       .run();
     await env.DB.prepare(
+      `INSERT INTO registered_actions (
+         target_id, name, version, label, description, idempotent,
+         example_payload_json, created_at, updated_at
+       ) VALUES ('DATA', 'healthCheck', 1, 'Health check', '', 1, '{}', ?, ?)`,
+    )
+      .bind(now, now)
+      .run();
+    await env.DB.prepare(
       `INSERT INTO schedules (
          id, name, description, target_id, action, action_version,
          cron_expression, timezone, enabled, revision, payload_json,
          retry_policy_json, timeout_ms, misfire_policy, misfire_grace_seconds,
-         next_run_at, created_at, updated_at
+         next_run_at, created_at, updated_at, registration_key,
+         managed_by_registration, declared_enabled
        ) VALUES (
          'schedule-1', 'Schedule', '', 'DATA', 'healthCheck', 1,
          '* * * * *', 'UTC', 1, 1, '{}',
          '{"maxAttempts":1,"delaysSeconds":[],"retryOnUnknown":false}',
-         30000, 'coalesce', 300, ?, ?, ?
+         30000, 'coalesce', 300, ?, ?, ?, 'schedule-1', 1, 1
        )`,
     )
       .bind(now - 60_000, now, now)
@@ -89,6 +102,26 @@ describe("ExecutionRepository on D1", () => {
       "SELECT COUNT(*) AS count FROM attempts",
     ).first<{ count: number }>();
     expect(attempts?.count).toBe(1);
+  });
+
+  it("does not dispatch an existing intent while its Operator Override is paused", async () => {
+    const due = (await repository.listDue(now, 2))[0]!;
+    await repository.materializeDue(due, now);
+    await env.DB.prepare(
+      `UPDATE schedules
+       SET enabled = 0, operator_paused = 1, next_run_at = NULL
+       WHERE id = 'schedule-1'`,
+    ).run();
+    expect(await repository.listReady(now, 2)).toHaveLength(0);
+
+    await env.DB.prepare(
+      `UPDATE schedules
+       SET enabled = 1, operator_paused = 0, next_run_at = ?
+       WHERE id = 'schedule-1'`,
+    )
+      .bind(now + 60_000)
+      .run();
+    expect(await repository.listReady(now, 2)).toHaveLength(1);
   });
 
   it("rolls back materialization when advancing next_run_at fails", async () => {
@@ -207,6 +240,64 @@ describe("ExecutionRepository on D1", () => {
       .bind(claim!.id)
       .first<{ status: string }>();
     expect(execution?.status).toBe("unknown");
+  });
+
+  it("stops a queued retry before RPC when current idempotency was revoked", async () => {
+    const snapshot = JSON.stringify({
+      scheduleId: "schedule-1",
+      scheduleRevision: 1,
+      targetId: "DATA",
+      action: "healthCheck",
+      actionVersion: 1,
+      targetManifestRevision: "data-v1",
+      targetActionIdempotent: true,
+      payload: {},
+      retryPolicy: {
+        maxAttempts: 2,
+        delaysSeconds: [60],
+        retryOnUnknown: false,
+      },
+      timeoutMs: 30_000,
+      cronExpression: "* * * * *",
+      timezone: "UTC",
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE schedules SET next_run_at = ? WHERE id = 'schedule-1'",
+      ).bind(now + 60_000),
+      env.DB.prepare(
+        `UPDATE registered_actions SET idempotent = 0
+         WHERE target_id = 'DATA' AND name = 'healthCheck' AND version = 1`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO executions (
+           id, schedule_id, target_id, source, scheduled_for, dedupe_key,
+           schedule_revision, snapshot_json, status, available_at,
+           next_attempt_reason, attempt_count, attempt_limit, max_auto_attempts,
+           retry_deadline_at, created_at, updated_at
+         ) VALUES (
+           'queued-retry', 'schedule-1', 'DATA', 'cron', ?, 'queued-retry',
+           1, ?, 'retry_wait', ?, 'automatic_retry', 1, 2, 2, ?, ?, ?
+         )`,
+      ).bind(now - 60_000, snapshot, now, now + 60_000, now - 60_000, now),
+    ]);
+
+    const result = await createApplication(env, { nowMs: () => now }).tick.run(
+      now,
+    );
+    expect(result.dispatched).toBe(1);
+    const execution = await env.DB.prepare(
+      `SELECT status, attempt_count, last_error_json
+       FROM executions WHERE id = 'queued-retry'`,
+    ).first<{
+      status: string;
+      attempt_count: number;
+      last_error_json: string;
+    }>();
+    expect(execution).toMatchObject({ status: "failed", attempt_count: 2 });
+    expect(JSON.parse(execution!.last_error_json)).toMatchObject({
+      code: "RETRY_IDEMPOTENCY_REVOKED",
+    });
   });
 
   it("cleans terminal history in bounded batches but never removes unknown", async () => {
