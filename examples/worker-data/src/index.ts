@@ -269,7 +269,7 @@ export function publishRegistration(env: Env) {
         payload: {},
         retryPolicy: {
           maxAttempts: 2,
-          delaysSeconds: [1],
+          delaysSeconds: [60],
           retryOnUnknown: false,
         },
         timeoutMs: 1_000,
