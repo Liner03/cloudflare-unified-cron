@@ -47,7 +47,7 @@ export function EmptyState({
   return (
     <div className="empty-state">
       <div>
-        <Inbox aria-hidden="true" size={28} />
+        <Inbox aria-hidden="true" className="state-illustration" size={28} />
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
           {description}
@@ -68,7 +68,11 @@ export function ErrorState({
   return (
     <div className="error-state" role="alert">
       <div>
-        <AlertTriangle aria-hidden="true" size={30} />
+        <AlertTriangle
+          aria-hidden="true"
+          className="state-illustration"
+          size={30}
+        />
         <h2 className="text-base font-semibold">平台状态暂时不可用</h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
           {error instanceof Error
@@ -76,9 +80,9 @@ export function ErrorState({
             : "请稍后重试；调度是否继续以 scheduled handler 与 D1 状态为准。"}
         </p>
         {retry === undefined ? null : (
-          <Button className="mt-4" onClick={retry} variant="outline">
-            <RotateCw aria-hidden="true" size={15} />
-            重新读取
+          <Button className="mt-4" onClick={retry} size="sm" variant="outline">
+            <RotateCw aria-hidden="true" size={14} />
+            重试
           </Button>
         )}
       </div>

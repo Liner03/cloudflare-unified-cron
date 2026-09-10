@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Ban,
   Check,
   Clipboard,
   KeyRound,
@@ -355,13 +356,13 @@ export function RegistrationsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[22%]">凭据</TableHead>
-                      <TableHead className="w-[29%]">
+                      <TableHead className="w-[35%]">
                         Target / Registration
                       </TableHead>
                       <TableHead className="w-[12%]">最近使用</TableHead>
                       <TableHead className="w-[12%]">到期</TableHead>
                       <TableHead className="w-[9%]">状态</TableHead>
-                      <TableHead className="w-[16%] text-right">操作</TableHead>
+                      <TableHead className="w-[10%] text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -396,7 +397,7 @@ export function RegistrationsPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             {status === "active" ? (
-                              <div className="flex justify-end gap-1">
+                              <div className="flex justify-end gap-0.5">
                                 <ActionConfirm
                                   confirmLabel="轮换并撤销旧 Token"
                                   description="平台会原子签发替换 Token 并撤销旧值；新值仍只显示一次。"
@@ -408,10 +409,12 @@ export function RegistrationsPage() {
                                       disabled={
                                         rotate.isPending || revoke.isPending
                                       }
-                                      size="sm"
+                                      className="size-8"
+                                      size="icon"
+                                      title={`轮换 ${token.label}`}
                                       variant="ghost"
                                     >
-                                      <RotateCw size={13} /> 轮换
+                                      <RotateCw aria-hidden="true" size={14} />
                                     </Button>
                                   }
                                 />
@@ -427,10 +430,12 @@ export function RegistrationsPage() {
                                       disabled={
                                         revoke.isPending || rotate.isPending
                                       }
-                                      size="sm"
+                                      className="size-8"
+                                      size="icon"
+                                      title={`撤销 ${token.label}`}
                                       variant="ghost"
                                     >
-                                      撤销
+                                      <Ban aria-hidden="true" size={14} />
                                     </Button>
                                   }
                                 />

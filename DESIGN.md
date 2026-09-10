@@ -22,6 +22,8 @@ colors:
   sidebar-muted: "oklch(0.54 0.008 97)"
   sidebar-line: "oklch(0.9401 0 0)"
   success-green: "oklch(0.52 0.115 154)"
+  information-blue: "oklch(0.56 0.145 252)"
+  comparison-cyan: "oklch(0.6 0.12 215)"
   warning-amber: "oklch(0.66 0.145 64)"
   unknown-violet: "oklch(0.57 0.13 300)"
 typography:
@@ -231,9 +233,9 @@ Dark mode remaps the same semantic roles to Claude+ charcoal planes, warm near-w
 
 The authenticated shell uses a fixed 208px sidebar and a 58px topbar. Main content occupies the remaining width, centers within a 1660px maximum, and uses 24px top and horizontal padding with 48px below. Primary business routes appear first; lower-frequency Cron, registration, and scheduler controls sit beneath a small “管理” divider.
 
-The Overview is a compact vertical stack with a 14px rhythm. Its command row is at least 62px high and pairs the title and business verdict with website/task counts, the last refresh time, and a refresh control. The 24-hour signal plane is one bordered object. At wide widths each task uses three columns: a 220–270px website/Cron tree, a flexible signal track with a 430px minimum, and a 170px latest-result/next-run column. The board stays horizontally comparable at a 900px minimum and vertically bounded to the smaller of 58vh or 650px. Website groups are individually collapsible; with multiple websites the highest-priority group opens first, the others begin collapsed, and the operator's choices persist locally.
+The Overview is a compact vertical stack with a 14px rhythm. Its command row is at least 62px high and pairs the title and business verdict with website/task counts, the last refresh time, and a refresh control. The 24-hour signal plane is one bordered object. At wide widths each task uses three columns: a 220–270px website/Cron tree, a flexible signal track with a 430px minimum, and a 170px latest-result/next-run column. The board stays horizontally comparable at a 900px minimum and vertically bounded to the smaller of 58vh or 650px. Website groups are individually collapsible; with multiple websites the highest-priority group opens first, the others begin collapsed, and the operator's choices persist locally. The website directory follows the same remembered-collapse behavior so a many-site deployment remains scannable.
 
-Below the signal, the workbench uses a 1.55/0.75 split for website rows and the attention queue, separated by 14px. The quality strip uses two 190px metrics followed by flexible platform evidence. At 1160px the workbench and website detail body become one column. At 900px the command row and site facts reflow. Below 900px the rail becomes an off-canvas drawer, the topbar becomes 54px, content padding becomes 18px 12px 38px, the time scale is hidden, and each task becomes a two-column mobile row with its signal trace on a full-width second line. At 520px the quality strip stacks to one column.
+Below the signal, the workbench uses a 1.55/0.75 split for website rows and the attention queue, separated by 14px. The quality strip uses two 230px blue/cyan bullet meters followed by flexible platform evidence; aggregate rates are never presented as a fabricated time-series line. At 1160px the workbench and website detail body become one column. At 900px the command row and site facts reflow. Below 900px the rail becomes an off-canvas drawer, the topbar becomes 54px, content padding becomes 18px 12px 38px, the time scale is hidden, and each task becomes a two-column mobile row with its signal trace on a full-width second line. At 520px the quality strip stacks to one column.
 
 **The One Field Rule.** Website identity, Cron branches, run points, last state, and next time belong to one continuous observation field; do not split them into separate KPI cards.
 
@@ -302,7 +304,7 @@ The 208px Quiet Sidebar is a low-contrast continuation of the canvas. Routes are
 
 ### Tables
 
-Tables remain the dense fallback for complete histories and technical lists. Headers are 40px high with 12px semibold Muted Taupe; cells use 12px horizontal and vertical padding. Rows are divided by Hairline and gain only a 50% Muted Oat wash on hover. IDs and schedules use Geist Mono; counts use tabular figures.
+Tables remain the dense fallback for complete histories and technical lists. Headers are 40px high with 12px semibold Muted Taupe; cells use 12px horizontal and vertical padding. Rows are divided by Hairline and gain only a 50% Muted Oat wash on hover. IDs and schedules use Geist Mono; counts use tabular figures. Status columns show one primary chip plus one quiet line of evidence rather than stacking redundant badges. Repeated row actions collapse to labeled icon buttons with compact fixed-width columns.
 
 ### 24-Hour Run Signal
 

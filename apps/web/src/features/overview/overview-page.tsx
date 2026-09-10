@@ -381,17 +381,19 @@ export function OverviewPage() {
       <section className="quality-strip" aria-label="运行质量与平台状态">
         <QualityMetric
           label="24 小时执行成功"
-          value={formatRate(
-            data.successRates.find((item) => item.window === "24h")?.execution
-              .rate ?? null,
-          )}
+          metric={
+            data.successRates.find((item) => item.window === "24h")
+              ?.execution ?? null
+          }
+          tone="info"
         />
         <QualityMetric
           label="7 天首次成功"
-          value={formatRate(
-            data.successRates.find((item) => item.window === "7d")?.firstAttempt
-              .rate ?? null,
-          )}
+          metric={
+            data.successRates.find((item) => item.window === "7d")
+              ?.firstAttempt ?? null
+          }
+          tone="comparison"
         />
         <div className="quality-platform">
           <StatusBadge status={heartbeatStatus} />
@@ -586,11 +588,52 @@ function ExecutionTrace({
   );
 }
 
-function QualityMetric({ label, value }: { label: string; value: string }) {
+function QualityMetric({
+  label,
+  metric,
+  tone,
+}: {
+  label: string;
+  metric: {
+    numerator: number;
+    denominator: number;
+    rate: number | null;
+  } | null;
+  tone: "info" | "comparison";
+}) {
+  const percentage =
+    metric?.rate === null || metric?.rate === undefined
+      ? null
+      : Math.round(metric.rate * 1000) / 10;
+  const value = percentage === null ? "暂无样本" : `${percentage}%`;
   return (
-    <div className="quality-metric">
-      <span>{label}</span>
-      <strong className="tabular">{value}</strong>
+    <div className="quality-metric" data-tone={tone}>
+      <div className="quality-metric-head">
+        <span>{label}</span>
+        <strong className="tabular">{value}</strong>
+      </div>
+      <div
+        aria-label={`${label}：${value}`}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        {...(percentage === null ? {} : { "aria-valuenow": percentage })}
+        className="quality-meter"
+        role="meter"
+      >
+        <span
+          className="quality-meter-fill"
+          style={
+            {
+              "--quality-value": `${percentage ?? 0}%`,
+            } as CSSProperties
+          }
+        />
+      </div>
+      <small className="tabular">
+        {metric && metric.denominator > 0
+          ? `${metric.numerator}/${metric.denominator} 次成功`
+          : "等待有效样本"}
+      </small>
     </div>
   );
 }
@@ -696,8 +739,4 @@ function formatHour(value: number): string {
     minute: "2-digit",
     hourCycle: "h23",
   }).format(value);
-}
-
-function formatRate(value: number | null): string {
-  return value === null ? "暂无样本" : `${(value * 100).toFixed(1)}%`;
 }

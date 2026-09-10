@@ -123,6 +123,17 @@ test("keeps sparse execution markers circular and discrete", async ({
   }
 });
 
+test("renders success rates as compact visual meters", async ({ page }) => {
+  await login(page, "/");
+  await mockSparseSignal(page);
+  await page.reload();
+
+  const meters = page.getByRole("meter");
+  await expect(meters).toHaveCount(2);
+  await expect(meters.nth(0)).toHaveAttribute("aria-valuenow", "50");
+  await expect(meters.nth(1)).toHaveAttribute("aria-valuenow", "50");
+});
+
 test("collapses website signal groups and remembers the choice", async ({
   page,
 }) => {
@@ -154,6 +165,28 @@ test("collapses website signal groups and remembers the choice", async ({
   await expect(
     page.getByRole("button", { name: "收起 Search Worker 的 1 个任务" }),
   ).toHaveAttribute("aria-expanded", "true");
+});
+
+test("collapses target site details and remembers the choice", async ({
+  page,
+}) => {
+  await login(page, "/targets");
+  await bootstrapRegistration(page);
+  await page.reload();
+
+  const collapse = page.getByRole("button", {
+    name: "收起 Data Worker 网站详情",
+  });
+  await expect(collapse).toHaveAttribute("aria-expanded", "true");
+  await collapse.click();
+  await expect(
+    page.getByRole("button", { name: "展开 Data Worker 网站详情" }),
+  ).toHaveAttribute("aria-expanded", "false");
+
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "展开 Data Worker 网站详情" }),
+  ).toHaveAttribute("aria-expanded", "false");
 });
 
 test("reveals a Registration Token once and never lists its raw value", async ({
@@ -417,13 +450,21 @@ function readDataString(value: unknown, key: string): string {
   throw new Error(`response did not contain data.${key}`);
 }
 
-function rateWindows() {
+function rateWindows(rate: number | null = null) {
   return (["24h", "7d", "30d"] as const).map((window) => ({
     window,
     from: new Date().toISOString(),
     to: new Date().toISOString(),
-    execution: { numerator: 0, denominator: 0, rate: null },
-    firstAttempt: { numerator: 0, denominator: 0, rate: null },
+    execution: {
+      numerator: rate === null ? 0 : 1,
+      denominator: rate === null ? 0 : 2,
+      rate,
+    },
+    firstAttempt: {
+      numerator: rate === null ? 0 : 1,
+      denominator: rate === null ? 0 : 2,
+      rate,
+    },
   }));
 }
 
@@ -548,7 +589,7 @@ async function mockSparseSignal(page: Page, includeSecondSite = false) {
             last_tick_scheduled_at: Date.parse(now),
             build_version: "test",
           },
-          successRates: rateWindows(),
+          successRates: rateWindows(0.5),
         },
         meta: { serverTime: now },
       },

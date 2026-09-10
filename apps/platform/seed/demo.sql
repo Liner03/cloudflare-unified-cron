@@ -262,7 +262,7 @@ SELECT
     'action', action,
     'actionVersion', action_version,
     'targetManifestRevision', target_manifest_revision,
-    'targetActionIdempotent', true,
+    'targetActionIdempotent', json('true'),
     'payload', json(payload_json),
     'retryPolicy', json(retry_policy_json),
     'timeoutMs', timeout_ms,
