@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TargetManifest } from "@unified-cron/contracts";
 import { TARGETS } from "../../targets.manifest";
 import { RegisteredTargetCatalog } from "./registered-target-catalog";
 import { DomainError } from "../../domain/error";
@@ -15,6 +16,14 @@ const targetStateSchema = z.object({
   created_at: z.number(),
   updated_at: z.number(),
 });
+
+const targetRowSchema = targetStateSchema.extend({
+  label: z.string(),
+  manifest_revision: z.string(),
+});
+
+type TargetRow = z.infer<typeof targetRowSchema>;
+type ListedTarget = TargetManifest & { isDemo: boolean };
 
 const registrationRowSchema = z.object({
   target_id: z.string(),
@@ -47,7 +56,7 @@ export class TargetRepository {
     }
   }
 
-  async list() {
+  async list(options: { includeLocalDemoTargets?: boolean } = {}) {
     const [statesResult, registrationsResult, actions] = await Promise.all([
       this.db.prepare("SELECT * FROM targets ORDER BY id").all(),
       this.db
@@ -60,7 +69,7 @@ export class TargetRepository {
     ]);
     const states = new Map(
       statesResult.results.map((value) => {
-        const row = targetStateSchema.parse(value);
+        const row = targetRowSchema.parse(value);
         return [row.id, row] as const;
       }),
     );
@@ -83,7 +92,23 @@ export class TargetRepository {
       values.push(action);
       actionsByTarget.set(action.targetId, values);
     }
-    return TARGETS.map((target) => ({
+    const listedTargets: ListedTarget[] = TARGETS.map((target) => ({
+      ...target,
+      isDemo: false,
+    }));
+    if (options.includeLocalDemoTargets) {
+      const deployedIds = new Set(TARGETS.map((target) => target.id));
+      const demoTargets = [...states.values()]
+        .filter(
+          (state) =>
+            !deployedIds.has(state.id) &&
+            state.manifest_revision.startsWith("local-demo-"),
+        )
+        .sort((left, right) => left.label.localeCompare(right.label, "zh-CN"))
+        .map(toLocalDemoManifest);
+      listedTargets.push(...demoTargets);
+    }
+    return listedTargets.map((target) => ({
       ...target,
       actions: (actionsByTarget.get(target.id) ?? []).map((action) => ({
         name: action.name,
@@ -93,7 +118,7 @@ export class TargetRepository {
         idempotent: action.idempotent,
         examplePayload: action.examplePayload,
       })),
-      state: states.get(target.id) ?? null,
+      state: serializeTargetState(states.get(target.id)),
       registration: registrations.get(target.id) ?? null,
     }));
   }
@@ -220,4 +245,23 @@ export class TargetRepository {
       conflictMessage: "Target 状态已变化或尚未同步",
     };
   }
+}
+
+function toLocalDemoManifest(row: TargetRow): ListedTarget {
+  const slug = row.id.toLowerCase().replaceAll("_", "-");
+  return {
+    id: row.id,
+    label: row.label,
+    binding: `DEMO_${row.id}`,
+    service: `demo-${slug}`,
+    entrypoint: "CronEntrypoint",
+    protocolVersion: 1,
+    manifestRevision: row.manifest_revision,
+    isDemo: true,
+  };
+}
+
+function serializeTargetState(row: TargetRow | undefined) {
+  if (!row) return null;
+  return targetStateSchema.parse(row);
 }

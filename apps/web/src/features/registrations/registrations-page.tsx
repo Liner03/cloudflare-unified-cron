@@ -151,7 +151,13 @@ export function RegistrationsPage() {
 
   const isLoading = tokens.isLoading || targets.isLoading;
   const hasError = tokens.isError || targets.isError;
-  const targetValues = targets.data?.data ?? [];
+  const targetValues = (targets.data?.data ?? []).filter(
+    (target) => !target.isDemo,
+  );
+  const realTargetIds = new Set(targetValues.map((target) => target.id));
+  const tokenValues = (tokens.data?.data ?? []).filter((token) =>
+    realTargetIds.has(token.targetId),
+  );
   const now = Date.now();
 
   return (
@@ -338,7 +344,7 @@ export function RegistrationsPage() {
                 </p>
               </div>
             </div>
-            {tokens.data.data.length === 0 ? (
+            {tokenValues.length === 0 ? (
               <EmptyState
                 description="为预授权的网站 Worker 签发 Token，并将它作为 Worker Secret 分发。"
                 title="尚无 Registration Token"
@@ -359,7 +365,7 @@ export function RegistrationsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tokens.data.data.map((token) => {
+                    {tokenValues.map((token) => {
                       const status = token.revokedAt
                         ? "revoked"
                         : Date.parse(token.expiresAt) <= now

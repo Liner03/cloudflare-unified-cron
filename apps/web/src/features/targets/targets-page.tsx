@@ -145,13 +145,15 @@ export function TargetsPage() {
                   <div className="site-panel-status">
                     <StatusBadge
                       status={
-                        target.state === null
-                          ? "not_synced"
-                          : enabled
-                            ? abnormal > 0
-                              ? "attention"
-                              : "enabled"
-                            : "disabled"
+                        target.isDemo
+                          ? "local_demo"
+                          : target.state === null
+                            ? "not_synced"
+                            : enabled
+                              ? abnormal > 0
+                                ? "attention"
+                                : "enabled"
+                              : "disabled"
                       }
                     />
                   </div>
@@ -230,17 +232,26 @@ export function TargetsPage() {
                       </dd>
                     </dl>
                     <div className="site-actions">
-                      <Button
-                        disabled={mutation.isPending || !target.state}
-                        onClick={() =>
-                          mutation.mutate({ id: target.id, operation: "check" })
-                        }
-                        size="sm"
-                        variant="outline"
-                      >
-                        <CheckCircle2 size={14} /> 检查连接
-                      </Button>
-                      {enabled ? (
+                      {target.isDemo ? (
+                        <p className="site-demo-note">
+                          本地只读演示，不会调用实际 Worker。
+                        </p>
+                      ) : (
+                        <Button
+                          disabled={mutation.isPending || !target.state}
+                          onClick={() =>
+                            mutation.mutate({
+                              id: target.id,
+                              operation: "check",
+                            })
+                          }
+                          size="sm"
+                          variant="outline"
+                        >
+                          <CheckCircle2 size={14} /> 检查连接
+                        </Button>
+                      )}
+                      {!target.isDemo && enabled ? (
                         <ActionConfirm
                           confirmLabel="停用网站派发"
                           danger
@@ -262,7 +273,7 @@ export function TargetsPage() {
                             </Button>
                           }
                         />
-                      ) : (
+                      ) : !target.isDemo ? (
                         <ActionConfirm
                           confirmLabel="恢复网站派发"
                           description="后续 Tick 可以重新领取该网站的待执行任务。"
@@ -283,7 +294,7 @@ export function TargetsPage() {
                             </Button>
                           }
                         />
-                      )}
+                      ) : null}
                     </div>
                   </aside>
                 </div>

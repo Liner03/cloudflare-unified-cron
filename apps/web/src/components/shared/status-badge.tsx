@@ -37,6 +37,7 @@ const labels: Record<string, string> = {
   unregistered: "待注册",
   active: "有效",
   attention: "需要处理",
+  local_demo: "本地演示",
   revoked: "已撤销",
   expired: "已过期",
 };
@@ -68,6 +69,7 @@ const icons: Record<string, LucideIcon> = {
   unregistered: CircleDashed,
   active: CircleCheck,
   attention: CircleAlert,
+  local_demo: CircleDashed,
   revoked: CircleOff,
   expired: CircleAlert,
 };

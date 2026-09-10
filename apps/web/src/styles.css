@@ -469,6 +469,7 @@ a {
 .status-skipped,
 .status-cancelled,
 .status-neutral,
+.status-local_demo,
 .status-disabled,
 .status-dispatch_active {
   color: var(--muted-foreground);
@@ -2418,6 +2419,24 @@ body {
   flex-wrap: wrap;
   gap: 6px;
   padding-top: 14px;
+}
+
+.site-demo-note,
+.demo-readonly-note {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.demo-readonly-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--muted) 45%, var(--background));
+  padding: 8px 10px;
 }
 
 @media (max-width: 1160px) {

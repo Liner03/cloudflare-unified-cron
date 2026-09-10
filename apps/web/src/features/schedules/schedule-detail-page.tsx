@@ -84,7 +84,12 @@ export function ScheduleDetailPage() {
         title={schedule.name}
       />
       <div className="mb-5 flex flex-wrap gap-2">
-        {!schedule.operatorPaused ? (
+        {schedule.isDemo ? (
+          <div className="demo-readonly-note">
+            <StatusBadge status="local_demo" />
+            <span>这条 Schedule 仅用于本地界面演示，操作已禁用。</span>
+          </div>
+        ) : !schedule.operatorPaused ? (
           <ActionConfirm
             confirmLabel="暂停计划"
             description="管理员覆盖会持续存在，后续 Registration 不能清除；现有 Execution 不会被删除。"
