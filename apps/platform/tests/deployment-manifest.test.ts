@@ -87,6 +87,30 @@ describe("deployment manifest", () => {
     }
   });
 
+  it("publishes an LLM-readable index of the real API surface", () => {
+    const source = readFileSync(
+      new URL("../../web/public/llms.txt", import.meta.url),
+      "utf8",
+    );
+    expect(source).toMatch(/^# Cloudflare Unified Cron Platform\n\n> /);
+    for (const path of [
+      "/api/v1/auth/session",
+      "/api/v1/registration",
+      "/api/v1/overview",
+      "/api/v1/schedules",
+      "/api/v1/targets",
+      "/api/v1/executions",
+      "/api/v1/audit-events",
+      "/api/v1/system",
+      "/api/v1/success-rates",
+      "/api/v1/registration-tokens",
+    ]) {
+      expect(source, path).toContain(path);
+    }
+    expect(source).not.toMatch(/(?:ghp_|gho_|ucrt_)[A-Za-z0-9_-]{20,}/);
+    expect(source).not.toContain("ADMIN_PASSWORD_HASH=");
+  });
+
   it("migrates both production D1 databases from the root command", () => {
     const repositoryRoot = new URL("../../../", import.meta.url);
     const rootPackage = packageSchema.parse(

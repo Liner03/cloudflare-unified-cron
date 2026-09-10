@@ -1,0 +1,74 @@
+# Cloudflare Unified Cron Platform
+
+> A private, single-account control plane that turns one Cloudflare Cron Trigger into durable, auditable schedules executed through allowlisted Service Binding RPC targets.
+
+The browser console and JSON API share one origin. The API base path is `/api/v1`. This is an operations system, not a general job queue: schedules come from Worker Registration, D1 is the control-state source of truth, and RPC side effects remain at-least-once unless the target implements business idempotency.
+
+JSON success responses use `{ "data": ... }` and may include `meta`. Errors use `{ "error": { "code", "message", "requestId", "details"? } }`. Unknown `/api` paths return JSON `404`, not the SPA.
+
+There are two separate authentication boundaries:
+
+- Administrator endpoints use the HttpOnly control-console session cookie. Login and logout require same-origin JSON requests.
+- Worker Registration uses `Authorization: Bearer ucrt_<token>` and never grants administrator access. A token is bound server-side to one preauthorized Target.
+
+Authenticated mutation requests require `Content-Type: application/json`, an exact allowed `Origin`, and an `Idempotency-Key` containing 8..128 characters from `A-Z a-z 0-9 . _ : -`. Schedule pause/resume also require `If-Match: "<revision>"`. Request bodies are limited to 64 KiB.
+
+Execution identity is stable across Retry. Retry creates a new Attempt but preserves the Execution and business idempotency key. Run again creates a new Execution and a new idempotency key. A timeout or broken RPC connection is `unknown`; it does not prove that the business side effect did not happen.
+
+The internal Target RPC surface is not an HTTP API. An allowlisted `CronEntrypoint` exposes `describe(): Promise<unknown>` and `cron(input: unknown): Promise<unknown>` through a Cloudflare Service Binding. Protocol version is currently `1`.
+
+Never place administrator passwords, session cookies, Registration Tokens, Cloudflare API tokens, Account IDs, D1 IDs, or complete request headers in prompts, logs, URLs, payload examples, or test reports.
+
+## Public session and Worker Registration
+
+- [Read administrator session](/api/v1/auth/session): `GET`; returns authenticated state and username when a valid session exists.
+- [Administrator login](/api/v1/auth/login): `POST`; JSON `{ "username": string, "password": string }`; sets the HttpOnly session cookie on success.
+- [Administrator logout](/api/v1/auth/logout): `POST`; JSON `{}`; revokes the current session and clears its cookie.
+- [Publish Worker Registration](/api/v1/registration): `PUT`; requires Registration Bearer token and `Idempotency-Key`; accepts the complete versioned Worker declaration.
+
+## Authenticated read APIs
+
+- [Operational overview](/api/v1/overview): `GET`; schedule counts, recent executions, 24-hour status distribution, success-rate windows, and scheduler state.
+- [List schedules](/api/v1/schedules): `GET`; optional `search`, `target`, and `enabled=true|false` query parameters.
+- [Schedule detail](/api/v1/schedules/{scheduleId}): `GET`; configuration snapshot and recent executions.
+- [Preview Cron occurrences](/api/v1/cron/preview): `POST`; JSON `{ "cronExpression", "timezone", "count"?, "after"? }`; read-only calculation but still follows authenticated mutation headers.
+- [List targets](/api/v1/targets): `GET`; deployed Target metadata joined with D1 state, Registration, and declared Actions.
+- [Target detail](/api/v1/targets/{targetId}): `GET`; Target state, schedules, Registration, and Action capabilities.
+- [List executions](/api/v1/executions): `GET`; optional `status`, `source`, `scheduleId`, `from`, `to`, `cursor`, and `limit` query parameters; maximum page size is 50.
+- [Execution detail](/api/v1/executions/{executionId}): `GET`; immutable dispatch snapshot, Attempts, result, error, lease, retry, and operator-resolution evidence.
+- [Audit events](/api/v1/audit-events): `GET`; optional `cursor` and `limit`; maximum page size is 50.
+- [System state](/api/v1/system): `GET`; dispatch pause, scheduler heartbeat, build, protocol, and budget evidence.
+- [Success rates](/api/v1/success-rates): `GET`; `window=24h|7d|30d` plus optional `targetId` and `scheduleId`.
+- [Registration Tokens](/api/v1/registration-tokens): `GET`; metadata only. Raw token values are never returned after the issuing response.
+
+## Authenticated mutation APIs
+
+- [Pause schedule](/api/v1/schedules/{scheduleId}/pause): `POST`; JSON `{}` plus `If-Match`; persists an Operator Override.
+- [Resume schedule](/api/v1/schedules/{scheduleId}/resume): `POST`; JSON `{}` plus `If-Match`; clears only the Operator Override.
+- [Check target](/api/v1/targets/{targetId}/check): `POST`; JSON `{}`; compares side-effect-free `describe()` output with the latest Registration.
+- [Enable target](/api/v1/targets/{targetId}/enable): `POST`; JSON `{}`; reopens physical dispatch when other guards allow it.
+- [Disable target](/api/v1/targets/{targetId}/disable): `POST`; JSON `{}`; blocks new dispatch without deleting history or forcibly terminating running RPC.
+- [Retry execution](/api/v1/executions/{executionId}/retry): `POST`; JSON `{ "confirmRisk": true }`; same Execution and idempotency key, new Attempt.
+- [Run execution again](/api/v1/executions/{executionId}/rerun): `POST`; JSON `{ "confirmRisk": true }`; creates a child Execution with a new idempotency key.
+- [Cancel execution](/api/v1/executions/{executionId}/cancel): `POST`; JSON `{}`; only valid for waiting states, never force-kills running RPC.
+- [Resolve unknown execution](/api/v1/executions/{executionId}/resolve): `POST`; JSON `{ "resolution": "confirmed_succeeded"|"confirmed_failed"|"abandon", "note": string, "confirmRisk": true }`.
+- [Issue Registration Token](/api/v1/registration-tokens): `POST`; JSON `{ "targetId", "label", "expiresInDays"? }`; the raw token appears exactly once.
+- [Rotate Registration Token](/api/v1/registration-tokens/{tokenId}/rotate): `POST`; JSON `{ "expiresInDays"? }`; atomically issues a replacement and revokes the old token.
+- [Revoke Registration Token](/api/v1/registration-tokens/{tokenId}/revoke): `POST`; JSON `{}`; blocks future Registration without deleting the current declaration.
+- [Pause all dispatch](/api/v1/system/pause): `POST`; JSON `{}`; persists the global dispatch safety switch.
+- [Resume all dispatch](/api/v1/system/resume): `POST`; JSON `{}`; clears the global switch without overriding Target or Schedule guards.
+
+## Canonical protocol documentation
+
+- [RPC protocol](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/protocol.md): Cron request/result envelopes, size limits, identity checks, Registration V1, revision semantics, and retry constraints.
+- [Worker integration](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/worker-integration.md): SDK usage, business idempotency, Registration publishing, Target allowlisting, and legacy Cron migration.
+- [Cron semantics](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/cron-semantics.md): accepted five-field subset, timezone behavior, DST cases, misfire policy, and next-run calculation.
+- [Architecture](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/architecture.md): D1 transactions, leases, materialization, claim/finalize boundaries, cleanup, and system limits.
+- [Operations](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/operations.md): fault interpretation, safe operator actions, retention, success-rate definitions, and logging correlation fields.
+- [Deployment](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/deployment.md): configuration, migrations, Secrets, deployment order, validation, and rollback boundaries.
+
+## Optional
+
+- [Operator console user stories](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/operator-console-user-stories.md): intended human workflows and acceptance language.
+- [Validation report](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/validation-report.md): recorded local verification evidence and explicit remote-testing gaps.
+- [Worker self-registration design](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/self-registration.md): rationale and implementation decisions behind Worker-owned declarations.
