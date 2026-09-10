@@ -8,7 +8,8 @@ import {
 import { Search } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/form-controls";
+import { Input } from "@/components/ui/form-controls";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   EmptyState,
@@ -33,6 +34,7 @@ import {
 import { formatScheduleBlockingReasons, formatTime } from "@/lib/format";
 
 const columnHelper = createColumnHelper<ScheduleSummary>();
+const ALL_FILTER_VALUE = "__all__";
 
 export function SchedulesPage() {
   const [params, setParams] = useSearchParams();
@@ -146,8 +148,8 @@ export function SchedulesPage() {
         description="跨网站查看所有自动任务；配置来自网站 Worker，控制台只负责运行证据与安全暂停。"
         title="所有 Cron"
       />
-      <div className="toolbar" role="search">
-        <label className="relative">
+      <div className="toolbar schedule-toolbar" role="search">
+        <label className="schedule-search relative">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             size={15}
@@ -165,37 +167,40 @@ export function SchedulesPage() {
             value={search}
           />
         </label>
-        <Select
-          aria-label="筛选网站"
-          onChange={(event) => {
+        <SelectMenu
+          ariaLabel="筛选网站"
+          className="schedule-filter"
+          onValueChange={(value) => {
             const next = new URLSearchParams(params);
-            if (event.target.value) next.set("target", event.target.value);
+            if (value !== ALL_FILTER_VALUE) next.set("target", value);
             else next.delete("target");
             setParams(next, { replace: true });
           }}
-          value={target}
-        >
-          <option value="">全部网站</option>
-          {(targets.data?.data ?? []).map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </Select>
-        <Select
-          aria-label="筛选启用状态"
-          onChange={(event) => {
+          options={[
+            { label: "全部网站", value: ALL_FILTER_VALUE },
+            ...(targets.data?.data ?? []).map((item) => ({
+              label: item.label,
+              value: item.id,
+            })),
+          ]}
+          value={target || ALL_FILTER_VALUE}
+        />
+        <SelectMenu
+          ariaLabel="筛选启用状态"
+          className="schedule-filter schedule-status-filter"
+          onValueChange={(value) => {
             const next = new URLSearchParams(params);
-            if (event.target.value) next.set("enabled", event.target.value);
+            if (value !== ALL_FILTER_VALUE) next.set("enabled", value);
             else next.delete("enabled");
             setParams(next, { replace: true });
           }}
-          value={enabled}
-        >
-          <option value="">全部状态</option>
-          <option value="true">当前可派发</option>
-          <option value="false">当前被阻止</option>
-        </Select>
+          options={[
+            { label: "全部状态", value: ALL_FILTER_VALUE },
+            { label: "当前可派发", value: "true" },
+            { label: "当前被阻止", value: "false" },
+          ]}
+          value={enabled || ALL_FILTER_VALUE}
+        />
       </div>
       <section className="ledger-section">
         {query.isLoading ? (

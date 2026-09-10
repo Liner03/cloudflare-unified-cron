@@ -73,6 +73,32 @@ test("authenticates and navigates the registered control plane", async ({
   ).toBeVisible();
 });
 
+test("uses a bounded custom menu for schedule filters", async ({ page }) => {
+  await login(page, "/schedules");
+  await bootstrapRegistration(page);
+  await page.reload();
+
+  const trigger = page.getByRole("combobox", { name: "筛选启用状态" });
+  const triggerBox = await trigger.boundingBox();
+  await trigger.click();
+  const listbox = page.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+
+  const listboxBox = await listbox.boundingBox();
+  expect(triggerBox).not.toBeNull();
+  expect(listboxBox).not.toBeNull();
+  const maximumMenuWidth =
+    (page.viewportSize()?.width ?? 0) < 480
+      ? (page.viewportSize()?.width ?? 0) - 24
+      : 320;
+  expect(listboxBox?.width ?? 0).toBeLessThanOrEqual(maximumMenuWidth + 1);
+  expect(listboxBox?.width ?? 0).toBeGreaterThanOrEqual(
+    (triggerBox?.width ?? 0) - 2,
+  );
+  await page.getByRole("option", { name: "当前被阻止" }).click();
+  await expect(page).toHaveURL(/enabled=false/);
+});
+
 test("keeps sparse execution markers circular and discrete", async ({
   page,
 }) => {
@@ -95,6 +121,39 @@ test("keeps sparse execution markers circular and discrete", async ({
       Math.abs((box?.width ?? 0) - (box?.height ?? 0)),
     ).toBeLessThanOrEqual(1);
   }
+});
+
+test("collapses website signal groups and remembers the choice", async ({
+  page,
+}) => {
+  await login(page, "/");
+  await mockSparseSignal(page, true);
+  await page.reload();
+
+  const dataToggle = page.getByRole("button", {
+    name: "收起 Data Worker 的 1 个任务",
+  });
+  const searchToggle = page.getByRole("button", {
+    name: "展开 Search Worker 的 1 个任务",
+  });
+  await expect(dataToggle).toHaveAttribute("aria-expanded", "true");
+  await expect(searchToggle).toHaveAttribute("aria-expanded", "false");
+  await dataToggle.click();
+  await expect(
+    page.getByRole("button", { name: "展开 Data Worker 的 1 个任务" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await searchToggle.click();
+  await expect(
+    page.getByRole("button", { name: "收起 Search Worker 的 1 个任务" }),
+  ).toHaveAttribute("aria-expanded", "true");
+
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "展开 Data Worker 的 1 个任务" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("button", { name: "收起 Search Worker 的 1 个任务" }),
+  ).toHaveAttribute("aria-expanded", "true");
 });
 
 test("reveals a Registration Token once and never lists its raw value", async ({
@@ -368,7 +427,7 @@ function rateWindows() {
   }));
 }
 
-async function mockSparseSignal(page: Page) {
+async function mockSparseSignal(page: Page, includeSecondSite = false) {
   const now = "2026-09-10T12:00:00.000Z";
   const earlier = "2026-09-10T06:00:00.000Z";
   const later = "2026-09-10T10:30:00.000Z";
@@ -417,12 +476,66 @@ async function mockSparseSignal(page: Page) {
     nextRunAt: "2026-09-10T18:00:00.000Z",
     lastExecution: { status: "failed", at: later },
   };
+  const schedules = includeSecondSite
+    ? [
+        schedule,
+        {
+          ...schedule,
+          id: "signal-backup",
+          key: "signal-backup",
+          name: "备用任务",
+          targetId: "SEARCH",
+          lastExecution: null,
+        },
+      ]
+    : [schedule];
+  const target = {
+    id: "DATA",
+    label: "Data Worker",
+    binding: "CRON_DATA",
+    service: "worker-data",
+    entrypoint: "CronEntrypoint",
+    protocolVersion: 1,
+    manifestRevision: "data-v1",
+    actions: [],
+    registration: {
+      revision: "test",
+      workerLabel: "Data Worker",
+      registeredAt: now,
+    },
+    state: {
+      enabled: 1,
+      last_check_at: null,
+      last_check_status: null,
+      last_check_message: null,
+    },
+  };
+  const targets = includeSecondSite
+    ? [
+        target,
+        {
+          ...target,
+          id: "SEARCH",
+          label: "Search Worker",
+          binding: "CRON_SEARCH",
+          service: "worker-search",
+          manifestRevision: "search-v1",
+          registration: {
+            ...target.registration,
+            workerLabel: "Search Worker",
+          },
+        },
+      ]
+    : [target];
 
   await page.route("**/api/v1/overview", (route) =>
     route.fulfill({
       json: {
         data: {
-          schedules: { active_schedules: 1, total_schedules: 1 },
+          schedules: {
+            active_schedules: schedules.length,
+            total_schedules: schedules.length,
+          },
           executions24h: [
             { status: "succeeded", count: 1 },
             { status: "failed", count: 1 },
@@ -442,7 +555,7 @@ async function mockSparseSignal(page: Page) {
     }),
   );
   await page.route("**/api/v1/schedules", (route) =>
-    route.fulfill({ json: { data: [schedule] } }),
+    route.fulfill({ json: { data: schedules } }),
   );
   await page.route(/\/api\/v1\/executions\?/, (route) =>
     route.fulfill({
@@ -454,31 +567,7 @@ async function mockSparseSignal(page: Page) {
   );
   await page.route("**/api/v1/targets", (route) =>
     route.fulfill({
-      json: {
-        data: [
-          {
-            id: "DATA",
-            label: "Data Worker",
-            binding: "CRON_DATA",
-            service: "worker-data",
-            entrypoint: "CronEntrypoint",
-            protocolVersion: 1,
-            manifestRevision: "data-v1",
-            actions: [],
-            registration: {
-              revision: "test",
-              workerLabel: "Data Worker",
-              registeredAt: now,
-            },
-            state: {
-              enabled: 1,
-              last_check_at: null,
-              last_check_status: null,
-              last_check_message: null,
-            },
-          },
-        ],
-      },
+      json: { data: targets },
     }),
   );
 }

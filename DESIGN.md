@@ -231,7 +231,7 @@ Dark mode remaps the same semantic roles to Claude+ charcoal planes, warm near-w
 
 The authenticated shell uses a fixed 208px sidebar and a 58px topbar. Main content occupies the remaining width, centers within a 1660px maximum, and uses 24px top and horizontal padding with 48px below. Primary business routes appear first; lower-frequency Cron, registration, and scheduler controls sit beneath a small “管理” divider.
 
-The Overview is a compact vertical stack with a 14px rhythm. Its command row is at least 62px high and pairs the title and business verdict with website/task counts, the last refresh time, and a refresh control. The 24-hour signal plane is one bordered object. At wide widths each task uses three columns: a 220–270px website/Cron tree, a flexible signal track with a 430px minimum, and a 170px latest-result/next-run column. The board stays horizontally comparable at a 900px minimum and vertically bounded to the smaller of 58vh or 650px.
+The Overview is a compact vertical stack with a 14px rhythm. Its command row is at least 62px high and pairs the title and business verdict with website/task counts, the last refresh time, and a refresh control. The 24-hour signal plane is one bordered object. At wide widths each task uses three columns: a 220–270px website/Cron tree, a flexible signal track with a 430px minimum, and a 170px latest-result/next-run column. The board stays horizontally comparable at a 900px minimum and vertically bounded to the smaller of 58vh or 650px. Website groups are individually collapsible; with multiple websites the highest-priority group opens first, the others begin collapsed, and the operator's choices persist locally.
 
 Below the signal, the workbench uses a 1.55/0.75 split for website rows and the attention queue, separated by 14px. The quality strip uses two 190px metrics followed by flexible platform evidence. At 1160px the workbench and website detail body become one column. At 900px the command row and site facts reflow. Below 900px the rail becomes an off-canvas drawer, the topbar becomes 54px, content padding becomes 18px 12px 38px, the time scale is hidden, and each task becomes a two-column mobile row with its signal trace on a full-width second line. At 520px the quality strip stacks to one column.
 
@@ -292,7 +292,7 @@ Operational containers read as flat planes, not floating cards.
 
 Fields use the same warm materials with a deliberately stronger outline.
 
-- **Style:** 40px height, Warm Ground fill, one-pixel Field Stroke, 10px radius, 12px horizontal padding, and 14px type. Textareas share the treatment with a 112px minimum height.
+- **Style:** 40px height, Warm Ground fill, one-pixel Field Stroke, 10px radius, 12px horizontal padding, and 14px type. Textareas share the treatment with a 112px minimum height. Filter selects open a bounded 12px-radius popover aligned to the trigger instead of inheriting a full-width browser-native menu.
 - **Focus:** The border becomes terracotta and gains a two-pixel 25%-opacity terracotta ring.
 - **Error / Disabled:** Errors use Failure Red with 12px helper text; disabled fields retain content at 50% opacity.
 
@@ -306,7 +306,7 @@ Tables remain the dense fallback for complete histories and technical lists. Hea
 
 ### 24-Hour Run Signal
 
-The signature field uses real Execution data only. Website headers are 48px high; Cron task rows are at least 52px. A one-pixel vertical trunk at 27px and 14px horizontal branches join 9px nodes to task names and Cron expressions. The responsive SVG trace is 32px high; success stays on the center line, failure rises, unknown/retry wait drops, and running sits slightly high. Points use state fills plus a contrasting ground stroke, while an empty trace becomes a 2/3 dashed Hairline.
+The signature field uses real Execution data only. Website headers are 48px high and expose keyboard-operable expand/collapse controls plus a direct link to the website's Cron list. Cron task rows are at least 52px. A one-pixel vertical trunk at 27px and 14px horizontal branches join 9px nodes to task names and Cron expressions. The responsive event rail is 32px high; success stays on the center line, failure rises, unknown/retry wait drops, and running sits slightly high. Fixed-size circular points use state fills plus a contrasting ground stroke, while an empty rail becomes a dashed Hairline. Discrete executions are never connected into a fabricated trend line.
 
 ### Attention Queue
 

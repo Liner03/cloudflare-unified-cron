@@ -2,13 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
   CircleAlert,
   Clock3,
   PauseCircle,
   RadioTower,
   RefreshCw,
 } from "lucide-react";
-import type { CSSProperties } from "react";
+import { useEffect, useId, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { ErrorState, LoadingState } from "@/components/shared/page-states";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -27,6 +28,7 @@ import { formatTime } from "@/lib/format";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ATTENTION_STATUSES = new Set(["failed", "unknown", "retry_wait"]);
+const SIGNAL_EXPANSION_KEY = "unified-cron:overview:site-expansion";
 
 interface WebsiteGroup {
   target: Target;
@@ -34,6 +36,8 @@ interface WebsiteGroup {
 }
 
 export function OverviewPage() {
+  const [signalExpansion, setSignalExpansion] =
+    useState<Record<string, boolean>>(readSignalExpansion);
   const overview = useQuery({
     queryKey: ["overview"],
     queryFn: ({ signal }) => apiGet("/api/v1/overview", overviewSchema, signal),
@@ -62,6 +66,16 @@ export function OverviewPage() {
     },
     refetchInterval: 30_000,
   });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SIGNAL_EXPANSION_KEY,
+        JSON.stringify(signalExpansion),
+      );
+    } catch {
+      // The control remains usable when browser storage is unavailable.
+    }
+  }, [signalExpansion]);
 
   const queries = [overview, schedules, targets, executions] as const;
   if (queries.some((query) => query.isLoading)) {
@@ -120,6 +134,11 @@ export function OverviewPage() {
     attentionCount,
     dispatchPaused,
   });
+  const isSiteExpanded = (targetId: string, index: number) =>
+    signalExpansion[targetId] ?? (websiteGroups.length === 1 || index === 0);
+  const allSitesExpanded = websiteGroups.every((group, index) =>
+    isSiteExpanded(group.target.id, index),
+  );
 
   return (
     <div className="operator-overview">
@@ -163,13 +182,34 @@ export function OverviewPage() {
             <h2 id="signal-ledger-title">24 小时运行信号</h2>
             <p>每个节点都来自真实 Execution；树状分支对应网站声明的 Cron。</p>
           </div>
-          <div className="signal-legend" aria-label="运行状态图例">
-            <span className="is-success">成功</span>
-            <span className="is-running">运行中</span>
-            <span className="is-retry">等待重试</span>
-            <span className="is-warning">结果未知</span>
-            <span className="is-failure">失败</span>
-            <span className="is-muted">无记录</span>
+          <div className="signal-ledger-tools">
+            <div className="signal-legend" aria-label="运行状态图例">
+              <span className="is-success">成功</span>
+              <span className="is-running">运行中</span>
+              <span className="is-retry">等待重试</span>
+              <span className="is-warning">结果未知</span>
+              <span className="is-failure">失败</span>
+              <span className="is-muted">无记录</span>
+            </div>
+            {websiteGroups.length > 1 ? (
+              <Button
+                onClick={() =>
+                  setSignalExpansion((current) => ({
+                    ...current,
+                    ...Object.fromEntries(
+                      websiteGroups.map((group) => [
+                        group.target.id,
+                        !allSitesExpanded,
+                      ]),
+                    ),
+                  }))
+                }
+                size="sm"
+                variant="outline"
+              >
+                {allSitesExpanded ? "全部收起" : "全部展开"}
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -187,12 +227,19 @@ export function OverviewPage() {
               </Button>
             </div>
           ) : (
-            websiteGroups.map((group) => (
+            websiteGroups.map((group, index) => (
               <WebsiteSignal
+                expanded={isSiteExpanded(group.target.id, index)}
                 executions={executionRows}
                 group={group}
                 key={group.target.id}
                 now={now}
+                onToggle={() =>
+                  setSignalExpansion((current) => ({
+                    ...current,
+                    [group.target.id]: !isSiteExpanded(group.target.id, index),
+                  }))
+                }
               />
             ))
           )}
@@ -377,41 +424,63 @@ function TimeScale({ now }: { now: number }) {
 function WebsiteSignal({
   group,
   executions,
+  expanded,
   now,
+  onToggle,
 }: {
   group: WebsiteGroup;
   executions: ExecutionSummary[];
+  expanded: boolean;
   now: number;
+  onToggle: () => void;
 }) {
   const { target, schedules } = group;
+  const taskListId = useId();
   const hasAttention = executions.some(
     (execution) =>
       execution.targetId === target.id &&
       ATTENTION_STATUSES.has(execution.status),
   );
   return (
-    <article className="signal-site">
+    <article className="signal-site" data-expanded={expanded}>
       <div className="signal-site-head">
-        <span
-          aria-hidden="true"
-          className="signal-site-node"
-          data-tone={
-            target.state?.enabled !== 1
-              ? "muted"
-              : hasAttention
-                ? "attention"
-                : "healthy"
-          }
-        />
-        <div>
-          <Link to={`/schedules?target=${encodeURIComponent(target.id)}`}>
-            {target.label}
-          </Link>
-          <span className="mono">{target.id}</span>
-        </div>
-        <span className="tabular">{schedules.length} 个任务</span>
+        <button
+          aria-controls={taskListId}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "收起" : "展开"} ${target.label} 的 ${schedules.length} 个任务`}
+          className="signal-site-toggle"
+          onClick={onToggle}
+          type="button"
+        >
+          <span
+            aria-hidden="true"
+            className="signal-site-node"
+            data-tone={
+              target.state?.enabled !== 1
+                ? "muted"
+                : hasAttention
+                  ? "attention"
+                  : "healthy"
+            }
+          />
+          <span className="signal-site-identity">
+            <strong>{target.label}</strong>
+            <span className="mono">{target.id}</span>
+          </span>
+          <span className="signal-site-toggle-meta tabular">
+            {schedules.length} 个任务
+            <ChevronDown aria-hidden="true" size={15} />
+          </span>
+        </button>
+        <Link
+          aria-label={`查看 ${target.label} 的所有 Cron`}
+          className="signal-site-open"
+          to={`/schedules?target=${encodeURIComponent(target.id)}`}
+        >
+          <ArrowRight aria-hidden="true" size={14} />
+        </Link>
       </div>
-      <div className="signal-task-list">
+      <div className="signal-task-list" hidden={!expanded} id={taskListId}>
         {schedules.length === 0 ? (
           <div className="signal-task signal-task-empty">
             <span>尚未声明 Cron</span>
@@ -524,6 +593,22 @@ function QualityMetric({ label, value }: { label: string; value: string }) {
       <strong className="tabular">{value}</strong>
     </div>
   );
+}
+
+function readSignalExpansion(): Record<string, boolean> {
+  try {
+    const stored = window.localStorage.getItem(SIGNAL_EXPANSION_KEY);
+    if (stored === null) return {};
+    const parsed: unknown = JSON.parse(stored);
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+      ),
+    );
+  } catch {
+    return {};
+  }
 }
 
 function groupWebsites(
