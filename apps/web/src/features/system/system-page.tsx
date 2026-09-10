@@ -104,8 +104,8 @@ export function SystemPage() {
             />
           )
         }
-        description="这里展示本应用实际观察到的心跳与软件预算，不伪装成全账户 Cloudflare 配额。"
-        title="系统"
+        description="统一调度器的心跳、派发开关和软件预算；网站级问题请回到业务总览。"
+        title="调度设置"
       />
 
       <div className="grid gap-5 lg:grid-cols-3">

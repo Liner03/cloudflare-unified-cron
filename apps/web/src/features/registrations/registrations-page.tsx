@@ -275,8 +275,8 @@ export function RegistrationsPage() {
             </DialogContent>
           </Dialog>
         }
-        description="业务 Worker 发布完整期望状态；管理员只管理物理 Target、Registration Token 与安全覆盖。"
-        title="注册与凭据"
+        description="低频的网站接入与凭据维护；日常运行状态请从网站和业务总览查看。"
+        title="网站接入"
       />
 
       {isLoading ? (
@@ -340,7 +340,7 @@ export function RegistrationsPage() {
             </div>
             {tokens.data.data.length === 0 ? (
               <EmptyState
-                description="先为一个部署白名单中的 Target 签发 Token，再将它作为 Worker Secret 分发。"
+                description="为预授权的网站 Worker 签发 Token，并将它作为 Worker Secret 分发。"
                 title="尚无 Registration Token"
               />
             ) : (

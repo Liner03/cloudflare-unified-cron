@@ -25,7 +25,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiGet } from "@/lib/api-client";
-import { schedulesSchema, type ScheduleSummary } from "@/lib/api-schemas";
+import {
+  schedulesSchema,
+  targetsSchema,
+  type ScheduleSummary,
+} from "@/lib/api-schemas";
 import { formatScheduleBlockingReasons, formatTime } from "@/lib/format";
 
 const columnHelper = createColumnHelper<ScheduleSummary>();
@@ -34,14 +38,19 @@ export function SchedulesPage() {
   const [params, setParams] = useSearchParams();
   const search = params.get("search") ?? "";
   const enabled = params.get("enabled") ?? "";
+  const target = params.get("target") ?? "";
   const query = useQuery({
-    queryKey: ["schedules", search, enabled],
+    queryKey: ["schedules", search, enabled, target],
     queryFn: ({ signal }) =>
       apiGet(
-        `/api/v1/schedules?search=${encodeURIComponent(search)}&enabled=${encodeURIComponent(enabled)}`,
+        `/api/v1/schedules?search=${encodeURIComponent(search)}&enabled=${encodeURIComponent(enabled)}&target=${encodeURIComponent(target)}`,
         schedulesSchema,
         signal,
       ),
+  });
+  const targets = useQuery({
+    queryKey: ["targets", "schedule-filter"],
+    queryFn: ({ signal }) => apiGet("/api/v1/targets", targetsSchema, signal),
   });
   const columns = [
     columnHelper.accessor("name", {
@@ -134,8 +143,8 @@ export function SchedulesPage() {
   return (
     <>
       <PageHeader
-        description="计划配置来自业务 Worker 的完整 Registration；管理员只能查看声明或设置暂停覆盖。"
-        title="计划"
+        description="跨网站查看所有自动任务；配置来自网站 Worker，控制台只负责运行证据与安全暂停。"
+        title="所有 Cron"
       />
       <div className="toolbar" role="search">
         <label className="relative">
@@ -156,6 +165,23 @@ export function SchedulesPage() {
             value={search}
           />
         </label>
+        <Select
+          aria-label="筛选网站"
+          onChange={(event) => {
+            const next = new URLSearchParams(params);
+            if (event.target.value) next.set("target", event.target.value);
+            else next.delete("target");
+            setParams(next, { replace: true });
+          }}
+          value={target}
+        >
+          <option value="">全部网站</option>
+          {(targets.data?.data ?? []).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+            </option>
+          ))}
+        </Select>
         <Select
           aria-label="筛选启用状态"
           onChange={(event) => {
@@ -186,11 +212,11 @@ export function SchedulesPage() {
               </Button>
             }
             description={
-              search || enabled
+              search || enabled || target
                 ? "调整筛选条件，或检查 Worker 最新 Registration。"
-                : "为 Target 签发 Token，并由业务 Worker 发布完整 Registration。"
+                : "网站 Worker 发布 Registration 后，自动任务会出现在这里。"
             }
-            title={search || enabled ? "没有匹配的计划" : "尚无 Schedule"}
+            title={search || enabled || target ? "没有匹配的任务" : "尚无 Cron"}
           />
         ) : (
           <div className="table-wrap">

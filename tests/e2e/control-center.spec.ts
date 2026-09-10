@@ -2,7 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 
 test("authenticates and navigates the registered control plane", async ({
   page,
-  isMobile,
 }, testInfo) => {
   const expectedViewports = {
     desktop: { width: 1440, height: 900 },
@@ -16,23 +15,25 @@ test("authenticates and navigates the registered control plane", async ({
   await bootstrapRegistration(page);
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: /一个真实时钟.*驱动所有关键计划/ }),
+    page.getByRole("heading", { name: "业务总览", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("7 天执行成功率")).toBeVisible();
+  await expect(page.getByText("24 小时运行信号")).toBeVisible();
 
-  if (isMobile) await page.getByRole("button", { name: "打开导航" }).click();
+  if ((page.viewportSize()?.width ?? 0) < 900) {
+    await page.getByRole("button", { name: "打开导航" }).click();
+  }
   await page
     .getByRole("navigation", { name: "主导航" })
-    .getByRole("link", { name: "计划", exact: true })
+    .getByRole("link", { name: "所有 Cron", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "计划", exact: true }),
+    page.getByRole("heading", { name: "所有 Cron", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("E2E Health", { exact: true })).toBeVisible();
 
   await page.goto("/targets");
   await expect(
-    page.getByRole("heading", { name: "目标服务", exact: true }),
+    page.getByRole("heading", { name: "网站", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("已注册", { exact: true })).toBeVisible();
   await expect(page.getByText(/e2e-/).first()).toBeVisible();
@@ -105,14 +106,13 @@ test("shows and clears Operator Override separately from Worker intent", async (
 
 test("keeps unknown API paths JSON and exposes mobile navigation", async ({
   page,
-  isMobile,
 }) => {
   await login(page, "/");
   const response = await page.request.get("/api/v1/not-a-route");
   expect(response.status()).toBe(404);
   expect(response.headers()["content-type"]).toContain("application/json");
 
-  if (isMobile) {
+  if ((page.viewportSize()?.width ?? 0) < 900) {
     const sidebar = page.locator(".sidebar");
     const main = page.locator("main");
     const openNavigation = page.getByRole("button", { name: "打开导航" });
@@ -182,7 +182,7 @@ test("shows dispatch pause separately from stale heartbeat", async ({
   );
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "心跳陈旧或尚未建立" }),
+    page.getByText("调度心跳需要检查", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("派发已暂停", { exact: true })).toBeVisible();
 });

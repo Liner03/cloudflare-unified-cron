@@ -1,6 +1,6 @@
 # Validation Report
 
-日期：2026-09-09。环境：macOS arm64、Node.js 24.19.0、pnpm 11.21.0、Wrangler 4.129.1。
+日期：2026-09-10。环境：macOS arm64、Node.js 24.19.0、pnpm 11.21.0、Wrangler 4.129.1。
 
 ## 聚合结果
 
@@ -68,8 +68,8 @@ env.CRON_DATA (worker-data-local#CronEntrypoint) Worker local [connected]
 ## 构建与路由
 
 - 示例 Worker dry-run：755.82 KiB，gzip 116.76 KiB。
-- 平台 Worker + 23 个 Static Assets dry-run：1313.59 KiB，gzip 227.63 KiB。
-- Vite 主入口：530.38 KiB，gzip 163.95 KiB；页面按 route code-split。
+- 平台 Worker + 28 个 Static Assets dry-run：1313.59 KiB，gzip 227.63 KiB。
+- Vite 主入口：530.79 KiB，gzip 164.04 KiB；页面按 route code-split。
 - `wrangler check startup` 本地 profile：27.3 ms window，12.6 ms active（含 2.5 ms GC）。该值只用于定位本机启动开销，不代表 Cloudflare CPU。
 - Static Assets 根路径返回 HTML 200，并带 CSP、X-Frame-Options、nosniff、Referrer 与 Permissions Policy。
 - `/api/v1/not-a-route` 返回 JSON 404 和 `Cache-Control: no-store`。
@@ -77,10 +77,11 @@ env.CRON_DATA (worker-data-local#CronEntrypoint) Worker local [connected]
 
 ## UI 证据
 
-- Desktop 1275px 与 Mobile 390px 的最终人工截图写入临时目录，不提交到仓库。
-- Playwright 在相同三个精确 viewport 执行并断言运行时尺寸。
-- 登录页、Registration 状态条、一次性 Token 对话框和凭据 ledger 均经真实浏览器检查；窄桌面状态列换行问题已修复并复拍。
-- Impeccable mechanical detector 对全部本轮 UI 目标返回空 findings。
+- 业务总览按批准 comp 在 1536×1024 完成 hero reproduction，并复核 1440×900、768×1024、390×844 与用户 1513×827 视口。
+- Playwright 在 desktop、tablet、mobile 三个精确 viewport 执行；900px 导航断点、菜单焦点恢复、Token、Operator Override 与平台状态均通过。
+- 登录、网站目录、网站/Cron 树、24 小时运行信号、异常入口、Registration Token 与深色模式均经真实浏览器检查。
+- Impeccable mechanical detector 因本机缺少 HTML parser 模块降级为 regex 扫描；fallback 返回空 findings，但未被当作完整通过。独立 finish reviewer 对其 7 项 material fixes 全部判定 resolved，最终 disposition 为 `ship`。
+- Asset producer 确认 `produce` 为空：实时信号与树保持 SVG/CSS/语义 HTML，不引入运行时 raster。
 
 ## 尚未执行
 

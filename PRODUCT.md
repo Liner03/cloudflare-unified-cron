@@ -39,7 +39,7 @@ web
 
 ## Brand Commitments
 
-名称为 Cloudflare Unified Cron Platform；界面称“Cron Control Center”。默认简体中文，开发字段和状态枚举保留英文。工作页保持低装饰、信息密度适中和运维控制台语气；用户后续明确批准 Overview 使用 `gpt-taste` 的 Editorial Split、Gapless Bento 与有目的的 GSAP 动效。所有统计必须来自真实 API，禁止随机数据或伪造成功指标。
+名称为 Cloudflare Unified Cron Platform；界面称“Worker 控制台”。默认简体中文，开发字段和状态枚举保留英文。产品是网站所有者照看多个 Cloudflare Worker 网站的私人运维工具，不采用多租户 SaaS、营销首页或指标卡片墙的表达。用户明确批准以 tweakcn Claude+ 暖色主题、Outfit 与 Geist Mono 为基础，并以 24 小时横向运行信号和“网站 Worker → Cron”树状连接作为业务总览的识别性结构；常规控件保持标准运维控制台的简洁度。所有统计与信号节点必须来自真实 API，禁止随机数据或伪造成功指标。
 
 ## Evidence on Hand
 

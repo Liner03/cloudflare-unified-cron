@@ -108,28 +108,16 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
   const submit = form.handleSubmit((values) => login.mutate(values));
   return (
     <main className="login-page">
-      <section className="login-signal" aria-hidden="true">
-        <div className="login-signal-grid">
-          <RadioTower size={30} strokeWidth={1.5} />
-          <span>ONE CLOCK / VERIFIED INTENT</span>
-        </div>
-        <div className="login-signal-copy">
-          <h1>每一次派发，先有可信身份。</h1>
-          <p>
-            管理员 Session 与 Worker Registration Token 分开授权；浏览器不能替
-            Worker 声明业务计划。
-          </p>
-        </div>
-      </section>
       <section className="login-panel" aria-labelledby="login-title">
         <div className="login-form-wrap">
           <div className="brand-lockup">
             <span className="brand-mark" aria-hidden="true" />
-            <span>Unified Cron</span>
+            <span>Worker 控制台</span>
           </div>
-          <div>
-            <h2 id="login-title">管理员登录</h2>
-            <p>使用部署时配置的本地管理员凭据。</p>
+          <div className="login-heading">
+            <RadioTower aria-hidden="true" size={22} />
+            <h1 id="login-title">管理员登录</h1>
+            <p>登录后查看所有 Worker 网站的自动任务与运行异常。</p>
           </div>
           <form
             className="login-form"
@@ -202,6 +190,9 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
               {login.isPending ? "正在验证" : "登录控制台"}
             </Button>
           </form>
+          <p className="login-footnote">
+            本地管理员会话与网站 Registration Token 分开授权。
+          </p>
         </div>
       </section>
     </main>

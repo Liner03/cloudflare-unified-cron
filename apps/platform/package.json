@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --config wrangler.local.jsonc --test-scheduled",
-    "dev:e2e": "wrangler dev --config wrangler.e2e.jsonc --test-scheduled",
+    "dev:e2e": "wrangler dev --config wrangler.e2e.jsonc --test-scheduled --var 'ADMIN_PASSWORD_HASH:pbkdf2-sha256$600000$MDEyMzQ1Njc4OWFiY2RlZg$YVNTOas3Ktj9Bxo0o7TgbDWqVSP6iO1YpNUrQDQGjgA'",
     "build": "wrangler deploy --config wrangler.dry-run.jsonc --dry-run --outdir dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "types": "wrangler types --config wrangler.local.jsonc --strict-vars false worker-configuration.d.ts",
