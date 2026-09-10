@@ -31,8 +31,12 @@ pnpm --filter @unified-cron/platform auth:hash-password
 # 将输出写入 apps/platform/.dev.vars 的 ADMIN_PASSWORD_HASH
 pnpm db:migrate:local
 pnpm seed:local
+# 可选：写入 8 个 Cron 与多种 Execution 状态，用于查看完整 UI
+pnpm seed:demo:local
 pnpm dev
 ```
+
+`seed:demo:local` 只写入本地 D1 中以 `demo-` 开头的确定性演示记录，不属于 migration 或生产部署流程。它保留单一真实白名单 Target `DATA`，但覆盖成功、失败、结果未知、自动重试等待、管理员暂停、声明停用、配置失效和无运行历史等界面状态。
 
 登录用户名默认为 `admin`，密码只以 PBKDF2-SHA256 哈希保存在本地
 `.dev.vars` 或生产 Worker Secret 中。仓库不包含可用的默认管理员密码。
