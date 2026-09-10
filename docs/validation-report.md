@@ -1,5 +1,7 @@
 # Validation Report
 
+后续验证以 [测试执行计划](test-plan.md) 为执行清单；本文只记录已经完成并有证据支持的结果。
+
 日期：2026-09-10。环境：macOS arm64、Node.js 24.19.0、pnpm 11.21.0、Wrangler 4.129.1。
 
 ## 聚合结果

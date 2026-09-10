@@ -101,3 +101,5 @@ pnpm targets:sync:remote
 - 业务 Worker 必须用稳定 `idempotencyKey` 实现真正的业务幂等。
 
 更多信息见 [架构实现说明](docs/architecture.md)、[Worker 接入](docs/worker-integration.md) 与 [部署手册](docs/deployment.md)。
+
+本地与真实 Cloudflare 环境的测试必须按 [测试执行计划](docs/test-plan.md) 的稳定测试 ID、证据格式和退出条件进行。
