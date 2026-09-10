@@ -55,6 +55,15 @@ describe("deployment manifest", () => {
     expect(sql).toContain("ON CONFLICT(id) DO UPDATE");
   });
 
+  it("writes JSON booleans in local demo execution snapshots", () => {
+    const sql = readFileSync(
+      new URL("../seed/demo.sql", import.meta.url),
+      "utf8",
+    );
+    expect(sql).toContain("'targetActionIdempotent', json('true')");
+    expect(sql).not.toContain("'targetActionIdempotent', true");
+  });
+
   it("requires the documented Node.js 24 runtime", () => {
     const rootPackage = packageSchema.parse(
       JSON.parse(

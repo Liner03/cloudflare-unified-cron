@@ -5,10 +5,11 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { Search } from "lucide-react";
+import { ArrowRight, Search } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/form-controls";
+import { Input } from "@/components/ui/form-controls";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   EmptyState,
@@ -25,23 +26,33 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiGet } from "@/lib/api-client";
-import { schedulesSchema, type ScheduleSummary } from "@/lib/api-schemas";
+import {
+  schedulesSchema,
+  targetsSchema,
+  type ScheduleSummary,
+} from "@/lib/api-schemas";
 import { formatScheduleBlockingReasons, formatTime } from "@/lib/format";
 
 const columnHelper = createColumnHelper<ScheduleSummary>();
+const ALL_FILTER_VALUE = "__all__";
 
 export function SchedulesPage() {
   const [params, setParams] = useSearchParams();
   const search = params.get("search") ?? "";
   const enabled = params.get("enabled") ?? "";
+  const target = params.get("target") ?? "";
   const query = useQuery({
-    queryKey: ["schedules", search, enabled],
+    queryKey: ["schedules", search, enabled, target],
     queryFn: ({ signal }) =>
       apiGet(
-        `/api/v1/schedules?search=${encodeURIComponent(search)}&enabled=${encodeURIComponent(enabled)}`,
+        `/api/v1/schedules?search=${encodeURIComponent(search)}&enabled=${encodeURIComponent(enabled)}&target=${encodeURIComponent(target)}`,
         schedulesSchema,
         signal,
       ),
+  });
+  const targets = useQuery({
+    queryKey: ["targets", "schedule-filter"],
+    queryFn: ({ signal }) => apiGet("/api/v1/targets", targetsSchema, signal),
   });
   const columns = [
     columnHelper.accessor("name", {
@@ -95,31 +106,37 @@ export function SchedulesPage() {
     columnHelper.display({
       id: "status",
       header: "最近 / 状态",
-      cell: ({ row }) => (
-        <div className="grid justify-items-start gap-1.5">
-          <StatusBadge
-            status={
-              row.original.effectiveEnabled ? "enabled" : "schedule_paused"
-            }
-          />
-          {row.original.lastExecution ? (
-            <StatusBadge status={row.original.lastExecution.status} />
-          ) : (
-            <span className="text-xs text-muted-foreground">尚未运行</span>
-          )}
-          <span className="text-xs text-muted-foreground">
-            {formatScheduleBlockingReasons(row.original.blockingReasons)}
-          </span>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const schedule = row.original;
+        const status = schedule.effectiveEnabled
+          ? (schedule.lastExecution?.status ?? "enabled")
+          : "schedule_paused";
+        const detail = schedule.effectiveEnabled
+          ? schedule.lastExecution
+            ? `最近 ${formatTime(schedule.lastExecution.at)}`
+            : "尚未运行"
+          : formatScheduleBlockingReasons(schedule.blockingReasons);
+        return (
+          <div className="schedule-status-cell">
+            <StatusBadge status={status} />
+            <span className="tabular">{detail}</span>
+          </div>
+        );
+      },
     }),
     columnHelper.display({
       id: "actions",
       header: "操作",
       cell: ({ row }) => (
-        <div className="flex justify-end gap-2">
-          <Button asChild size="sm" variant="ghost">
-            <Link to={`/schedules/${row.original.id}`}>查看</Link>
+        <div className="flex justify-end">
+          <Button asChild size="icon" variant="ghost">
+            <Link
+              aria-label={`查看 ${row.original.name}`}
+              title={`查看 ${row.original.name}`}
+              to={`/schedules/${row.original.id}`}
+            >
+              <ArrowRight aria-hidden="true" size={15} />
+            </Link>
           </Button>
         </div>
       ),
@@ -134,11 +151,11 @@ export function SchedulesPage() {
   return (
     <>
       <PageHeader
-        description="计划配置来自业务 Worker 的完整 Registration；管理员只能查看声明或设置暂停覆盖。"
-        title="计划"
+        description="跨网站查看所有自动任务；配置来自网站 Worker，控制台只负责运行证据与安全暂停。"
+        title="所有 Cron"
       />
-      <div className="toolbar" role="search">
-        <label className="relative">
+      <div className="toolbar schedule-toolbar" role="search">
+        <label className="schedule-search relative">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             size={15}
@@ -156,20 +173,40 @@ export function SchedulesPage() {
             value={search}
           />
         </label>
-        <Select
-          aria-label="筛选启用状态"
-          onChange={(event) => {
+        <SelectMenu
+          ariaLabel="筛选网站"
+          className="schedule-filter"
+          onValueChange={(value) => {
             const next = new URLSearchParams(params);
-            if (event.target.value) next.set("enabled", event.target.value);
+            if (value !== ALL_FILTER_VALUE) next.set("target", value);
+            else next.delete("target");
+            setParams(next, { replace: true });
+          }}
+          options={[
+            { label: "全部网站", value: ALL_FILTER_VALUE },
+            ...(targets.data?.data ?? []).map((item) => ({
+              label: item.label,
+              value: item.id,
+            })),
+          ]}
+          value={target || ALL_FILTER_VALUE}
+        />
+        <SelectMenu
+          ariaLabel="筛选启用状态"
+          className="schedule-filter schedule-status-filter"
+          onValueChange={(value) => {
+            const next = new URLSearchParams(params);
+            if (value !== ALL_FILTER_VALUE) next.set("enabled", value);
             else next.delete("enabled");
             setParams(next, { replace: true });
           }}
-          value={enabled}
-        >
-          <option value="">全部状态</option>
-          <option value="true">当前可派发</option>
-          <option value="false">当前被阻止</option>
-        </Select>
+          options={[
+            { label: "全部状态", value: ALL_FILTER_VALUE },
+            { label: "当前可派发", value: "true" },
+            { label: "当前被阻止", value: "false" },
+          ]}
+          value={enabled || ALL_FILTER_VALUE}
+        />
       </div>
       <section className="ledger-section">
         {query.isLoading ? (
@@ -186,20 +223,25 @@ export function SchedulesPage() {
               </Button>
             }
             description={
-              search || enabled
+              search || enabled || target
                 ? "调整筛选条件，或检查 Worker 最新 Registration。"
-                : "为 Target 签发 Token，并由业务 Worker 发布完整 Registration。"
+                : "网站 Worker 发布 Registration 后，自动任务会出现在这里。"
             }
-            title={search || enabled ? "没有匹配的计划" : "尚无 Schedule"}
+            title={search || enabled || target ? "没有匹配的任务" : "尚无 Cron"}
           />
         ) : (
           <div className="table-wrap">
-            <Table>
+            <Table className="schedule-table">
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
+                      <TableHead
+                        className={
+                          header.column.id === "actions" ? "text-right" : ""
+                        }
+                        key={header.id}
+                      >
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -215,7 +257,12 @@ export function SchedulesPage() {
                 {table.getRowModel().rows.map((row) => (
                   <TableRow key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
+                      <TableCell
+                        className={
+                          cell.column.id === "actions" ? "text-right" : ""
+                        }
+                        key={cell.id}
+                      >
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),

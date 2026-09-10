@@ -1,330 +1,337 @@
 ---
 name: "Cloudflare Unified Cron Platform"
-description: "An editorial dispatch ledger for truthful, bounded Worker scheduling."
+description: "A warm, signal-led operator console for watching website Workers and their Cron."
 colors:
-  signal-orange: "#b94720"
-  signal-orange-focus: "#9d3815"
-  signal-orange-dark: "#eb794a"
-  warm-paper: "#f4f1e9"
-  paper-card: "#faf8f2"
-  paper-popover: "#fffdf7"
-  dark-ink: "#20251f"
-  muted-ink: "#656c62"
-  warm-secondary: "#e8e3d8"
-  warm-secondary-ink: "#2e342d"
-  ledger-line: "#d7d1c4"
-  field-line: "#c9c2b5"
-  deep-rail: "#1d231f"
-  rail-paper: "#eef0e9"
-  rail-muted: "#9ea89e"
-  action-on-orange: "#fffaf5"
-  success: "#2f7651"
-  warning: "#a76117"
-  destructive: "#b83d38"
-  unknown: "#8055a6"
-  night-paper: "#151915"
-  night-card: "#1b201c"
-  night-ink: "#e8e8df"
-  night-line: "#363d36"
+  terracotta-action: "oklch(0.6171 0.1375 39.0427)"
+  warm-ground: "oklch(0.9818 0.0054 95.0986)"
+  brown-charcoal: "oklch(0.3438 0.0269 95.7226)"
+  cream-plane: "oklch(0.9665 0.0067 97.3521)"
+  plane-ink: "oklch(0.1908 0.002 106.5859)"
+  white-popover: "oklch(1 0 0)"
+  popover-ink: "oklch(0.2671 0.0196 98.939)"
+  oat-secondary: "oklch(0.9245 0.0138 92.9892)"
+  secondary-ink: "oklch(0.4334 0.0177 98.6048)"
+  muted-oat: "oklch(0.9341 0.0153 90.239)"
+  muted-taupe: "oklch(0.5341 0.0078 97.4503)"
+  accent-ink: "oklch(0.2671 0.0196 98.939)"
+  failure-red: "oklch(0.55 0.19 27)"
+  hairline: "oklch(0.8847 0.0069 97.3627)"
+  field-stroke: "oklch(0.7621 0.0156 98.3528)"
+  quiet-sidebar: "oklch(0.9663 0.008 98.8792)"
+  sidebar-ink: "oklch(0.359 0.0051 106.6524)"
+  sidebar-muted: "oklch(0.54 0.008 97)"
+  sidebar-line: "oklch(0.9401 0 0)"
+  success-green: "oklch(0.52 0.115 154)"
+  information-blue: "oklch(0.56 0.145 252)"
+  comparison-cyan: "oklch(0.6 0.12 215)"
+  warning-amber: "oklch(0.66 0.145 64)"
+  unknown-violet: "oklch(0.57 0.13 300)"
 typography:
   display:
-    fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "clamp(3rem, 4vw, 4.5rem)"
+    fontFamily: "Outfit Variable, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1.85rem"
     fontWeight: 680
-    lineHeight: 0.98
-    letterSpacing: "-0.038em"
+    lineHeight: 1
+    letterSpacing: "-0.03em"
   headline:
-    fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "clamp(2.3rem, 4.5vw, 4.8rem)"
-    fontWeight: 670
-    lineHeight: 1.02
-    letterSpacing: "-0.038em"
-  title:
-    fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "clamp(1.55rem, 2vw, 2rem)"
-    fontWeight: 690
+    fontFamily: "Outfit Variable, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1.75rem"
+    fontWeight: 650
     lineHeight: 1.15
     letterSpacing: "-0.025em"
+  title:
+    fontFamily: "Outfit Variable, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "16px"
+    fontWeight: 650
+    letterSpacing: "-0.012em"
   body:
-    fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "14px"
+    fontFamily: "Outfit Variable, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
   label:
-    fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "11px"
-    fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: "0.06em"
+    fontFamily: "Outfit Variable, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "12px"
+    fontWeight: 600
+    letterSpacing: "normal"
+  navigation:
+    fontFamily: "Outfit Variable, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 560
+    lineHeight: 1.4
+    letterSpacing: "normal"
   mono:
-    fontFamily: "SFMono-Regular, Consolas, Liberation Mono, monospace"
+    fontFamily: "Geist Mono Variable, ui-monospace, SFMono-Regular, monospace"
     fontSize: "12px"
     fontWeight: 400
-    lineHeight: 1.55
     letterSpacing: "normal"
 rounded:
-  mark: "8px"
+  brand: "9px"
   control: "10px"
-  inset: "12px"
-  card: "14px"
-  feature: "18px"
+  site-mark: "12px"
+  panel: "14px"
+  login: "16px"
   pill: "999px"
 spacing:
-  hairline: "1px"
-  xs: "4px"
-  sm: "8px"
-  control-gap: "10px"
+  base: "4px"
+  compact: "6px"
+  xs: "8px"
+  sm: "10px"
   md: "12px"
-  ledger: "16px"
-  field: "18px"
+  panel-gap: "14px"
+  panel: "16px"
+  room: "18px"
   card: "20px"
+  topbar: "22px"
   page: "24px"
-  section: "28px"
-  spacious: "34px"
-  feature: "46px"
-  hero: "64px"
-  mobile-section: "96px"
+  login: "26px"
+  page-bottom: "48px"
 components:
   button-primary:
-    backgroundColor: "{colors.signal-orange}"
-    textColor: "{colors.action-on-orange}"
-    typography: "{typography.body}"
+    backgroundColor: "{colors.terracotta-action}"
+    textColor: "{colors.white-popover}"
+    typography: "{typography.label}"
     rounded: "{rounded.control}"
     padding: "0 12px"
     height: "36px"
   button-primary-hover:
-    backgroundColor: "color-mix(in srgb, #b94720 88%, transparent)"
-    textColor: "{colors.action-on-orange}"
+    backgroundColor: "color-mix(in srgb, oklch(0.6171 0.1375 39.0427) 88%, transparent)"
+    textColor: "{colors.white-popover}"
     rounded: "{rounded.control}"
     height: "36px"
   button-outline:
-    backgroundColor: "{colors.warm-paper}"
-    textColor: "{colors.dark-ink}"
-    typography: "{typography.body}"
+    backgroundColor: "{colors.warm-ground}"
+    textColor: "{colors.brown-charcoal}"
+    typography: "{typography.label}"
     rounded: "{rounded.control}"
     padding: "0 12px"
     height: "36px"
   button-danger:
-    backgroundColor: "{colors.destructive}"
-    textColor: "#ffffff"
-    typography: "{typography.body}"
+    backgroundColor: "{colors.failure-red}"
+    textColor: "{colors.white-popover}"
+    typography: "{typography.label}"
     rounded: "{rounded.control}"
     padding: "0 12px"
     height: "36px"
   input:
-    backgroundColor: "{colors.warm-paper}"
-    textColor: "{colors.dark-ink}"
-    typography: "{typography.body}"
+    backgroundColor: "{colors.warm-ground}"
+    textColor: "{colors.brown-charcoal}"
+    typography: "{typography.label}"
     rounded: "{rounded.control}"
     padding: "0 12px"
     height: "40px"
     width: "100%"
-  card:
-    backgroundColor: "{colors.paper-card}"
-    textColor: "{colors.dark-ink}"
-    rounded: "{rounded.card}"
-    padding: "20px"
+  panel:
+    backgroundColor: "{colors.cream-plane}"
+    textColor: "{colors.plane-ink}"
+    rounded: "{rounded.panel}"
+    padding: "16px"
   status-badge:
     backgroundColor: "transparent"
-    textColor: "{colors.muted-ink}"
+    textColor: "{colors.muted-taupe}"
     typography: "{typography.label}"
     rounded: "{rounded.pill}"
     padding: "2px 8px"
-  execution-stack-card:
-    backgroundColor: "{colors.paper-card}"
-    textColor: "{colors.dark-ink}"
-    rounded: "{rounded.feature}"
-    padding: "clamp(26px, 4vw, 54px)"
+  navigation-active:
+    backgroundColor: "color-mix(in oklch, oklch(0.6171 0.1375 39.0427) 12%, oklch(0.9663 0.008 98.8792))"
+    textColor: "{colors.terracotta-action}"
+    typography: "{typography.navigation}"
+    rounded: "{rounded.control}"
+    padding: "0 10px"
+    height: "40px"
 ---
 
 # Design System: Cloudflare Unified Cron Platform
 
 ## Overview
 
-**Creative North Star: "The Dispatch Ledger"**
+**Creative North Star: "The 24-Hour Run Signal"**
 
-The interface is an operational ledger given an editorial split: warm paper carries the working record, a fixed dark-ink rail anchors navigation, and signal orange marks the few actions that change intent. Its visual authority comes from restraint, precise borders, truthful state language, and large typographic statements—not from a generic metric-card wall.
+This is a private operations console, not a SaaS dashboard or marketing surface. Its visual center is a continuous 24-hour run signal in which real Execution points sit on the branches of each website Worker and its declared Cron tasks. A short business verdict precedes that field so an owner can decide within seconds whether to leave or investigate.
 
-The system is quiet but not timid. Dense tables, controls, and timelines handle routine operations; the Overview opens into a more spacious narrative with a split signal image, a gapless bento, risk slices, and a GSAP pin/stack sequence. Every expressive move still serves operational truth: `failed`, `unknown`, `retry_wait`, and platform health remain distinct, and state never relies on color alone.
+The visual world is the Claude+ warm control room: near-white ground, cream operational planes, brown-charcoal copy, fine observation lines, and terracotta reserved for action and active system motion. Standard control patterns remain compact and familiar. The signature comes from the authored website→Cron tree and signal trace, not from oversized promotional type, floating KPI cards, raster decoration, or scroll choreography.
 
 **Key Characteristics:**
 
-- Warm paper surfaces against dark ink, with signal orange reserved for primary intent.
-- Geist throughout, shifting from compact operational labels to tightly tracked editorial display type.
-- Thin ledger lines and tonal fills create most structure; depth is exceptional.
-- Gapless bento and table divisions read as one dispatch surface, not a pile of floating cards.
-- Status always combines text or iconography with hue.
-- Desktop scroll storytelling collapses into a direct linear flow on mobile and reduced-motion systems.
+- One truthful business verdict leads the page.
+- A single responsive 24-hour field connects website identity, Cron branches, recent outcomes, and next run.
+- Outfit carries human-facing operations language; Geist Mono is reserved for machine evidence.
+- Warm, flat planes and one-pixel rules provide structure with almost no ambient depth.
+- Terracotta marks actions and active motion; green, amber, violet, and red retain separate operational meanings.
+- Desktop prioritizes horizontal comparison; mobile becomes a focused vertical site corridor without discarding evidence.
 
 ## Colors
 
-The palette pairs low-chroma warm neutrals with a single rust-orange action signal; green, amber, red, and violet communicate mutually distinct operational outcomes.
+The Claude+ palette uses warm OKLCH neutrals as the working material, terracotta as the interaction accent, and four distinct state colors for operational truth.
 
 ### Primary
 
-- **Signal Orange:** The scarce action color for primary buttons, capacity marks, the brand pulse, and faint editorial washes.
-- **Signal Orange Focus:** The stronger orange used for keyboard focus and selection authority.
-- **Signal Orange Dark:** The brighter dark-mode remap that preserves action contrast on night surfaces.
+- **Terracotta Action** (`oklch(0.6171 0.1375 39.0427)`): Primary actions, active navigation, links, running Execution points, selection, and focus rings. It signals movement or intent rather than success.
+- **White on Terracotta** (`oklch(1 0 0)`): Foreground for filled primary and destructive actions.
 
 ### Secondary
 
-- **Warm Secondary:** A slightly deeper paper tone for quiet icon wells and secondary controls.
-- **Warm Secondary Ink:** Its dark, low-chroma foreground.
+- **Oat Secondary** (`oklch(0.9245 0.0138 92.9892)`): Quiet hover fills, site identity wells, and secondary emphasis.
+- **Secondary Ink** (`oklch(0.4334 0.0177 98.6048)`): Text and icons placed on Oat Secondary.
 
 ### Tertiary
 
-- **Success Green:** Confirmed success, compatible targets, and healthy dispatch signals.
-- **Warning Amber:** Running, pending, retry-wait, and other unsettled but understood states.
-- **Destructive Red:** Explicit failure, incompatibility, unreachable targets, and destructive actions.
-- **Unknown Violet:** Results whose external side effects cannot yet be confirmed.
+- **Success Green** (`oklch(0.52 0.115 154)`): Confirmed success, healthy sites, compatible targets, and normal run traces.
+- **Warning Amber** (`oklch(0.66 0.145 64)`): Stale heartbeat, paused schedules, retry wait, pending, and unsettled but understood states.
+- **Unknown Violet** (`oklch(0.57 0.13 300)`): Unknown outcomes, unsynchronized registrations, and unavailable dispatch evidence.
+- **Failure Red** (`oklch(0.55 0.19 27)`): Explicit failure, unreachable or incompatible targets, attention verdicts, and destructive actions.
 
 ### Neutral
 
-- **Warm Paper:** The primary light-mode canvas.
-- **Paper Card:** The slightly lifted paper used by cards, bento cells, and execution panels.
-- **Paper Popover:** The cleanest paper reserved for dialogs and overlays.
-- **Dark Ink:** Primary light-mode text and the basis of the dark navigation rail.
-- **Muted Ink:** Supporting copy, metadata, timestamps, and secondary labels.
-- **Ledger Line:** Dividers, card outlines, table rules, and section boundaries.
-- **Field Line:** The stronger boundary used by form controls.
-- **Deep Rail:** The fixed desktop navigation and dark editorial action surface.
-- **Rail Paper / Rail Muted:** High- and low-emphasis text on Deep Rail.
-- **Night Paper / Night Card / Night Ink / Night Line:** The explicit dark-mode surface, text, and boundary remap.
+- **Warm Ground** (`oklch(0.9818 0.0054 95.0986)`): The light-mode page and signal-track canvas.
+- **Brown Charcoal** (`oklch(0.3438 0.0269 95.7226)`): Primary human-readable copy.
+- **Cream Plane** (`oklch(0.9665 0.0067 97.3521)`): Panels blended toward Warm Ground for low-contrast operational grouping.
+- **Plane Ink** (`oklch(0.1908 0.002 106.5859)`): High-emphasis panel titles and task names.
+- **Muted Oat / Muted Taupe** (`oklch(0.9341 0.0153 90.239)` / `oklch(0.5341 0.0078 97.4503)`): Hover washes, helper copy, timestamps, counts, and quiet states.
+- **Hairline / Field Stroke** (`oklch(0.8847 0.0069 97.3627)` / `oklch(0.7621 0.0156 98.3528)`): Panel divisions and the stronger boundary used by form controls.
+- **Quiet Sidebar** (`oklch(0.9663 0.008 98.8792)`): The light navigation rail, visually adjacent to rather than detached from the page.
+- **Sidebar Muted** (`oklch(0.54 0.008 97)`): Inactive navigation, the management label, and the infrastructure footnote.
+
+Dark mode remaps the same semantic roles to Claude+ charcoal planes, warm near-white copy, a brighter terracotta primary, and higher-lightness state colors. Component assignments do not change between modes.
 
 ### Named Rules
 
-**The Signal Is Scarce Rule.** Signal orange identifies primary intent and small system pulses; it does not flood large surfaces or compete with status colors.
+**The Terracotta Means Motion Rule.** Use terracotta for actions, active navigation, links, and running work; never reuse it as a generic success color.
 
-**The Operational Truth Rule.** Never collapse unknown, failure, warning, and success into a binary red/green system; retain their text labels, icons, and separate hues.
+**The State Separation Rule.** Success, warning, unknown, and failure keep distinct colors plus visible text or icons. No percentage or green wash may hide unknown, skipped, blocked, or sample-limited evidence.
 
-**The Warm Neutral Rule.** Default surfaces stay warm and low-chroma. Pure white appears only as a small interaction lift, never as the page canvas.
+**The Warm Plane Rule.** Operational surfaces stay near-white, warm, and low-contrast. No glass, gradient, or saturated background competes with the run signal.
 
 ## Typography
 
-**Display Font:** Geist Variable (with UI system sans fallbacks)  
-**Body Font:** Geist Variable (with UI system sans fallbacks)  
-**Label/Mono Font:** SFMono-Regular (with Consolas and Liberation Mono fallbacks)
+**Display Font:** Outfit Variable (with UI system sans fallbacks)
 
-**Character:** Geist gives Chinese and English operations copy a single disciplined voice. Tight tracking and high weight turn the Overview into an editorial dispatch statement, while normal-sized body text and tabular figures keep the working surfaces fast to scan.
+**Body Font:** Outfit Variable (with UI system sans fallbacks)
+
+**Label/Mono Font:** Geist Mono Variable (with UI monospace and SFMono fallbacks)
+
+**Character:** Outfit is open and human without becoming promotional, which suits Chinese-first operational labels and compact page verdicts. Geist Mono makes Cron expressions, Worker IDs, revisions, exact times, and raw evidence visibly technical without turning the whole console into a terminal.
 
 ### Hierarchy
 
-- **Display** (680, fluid 3rem–4.5rem, 0.98 line-height): The two-line Overview proposition; it balances across the editorial split.
-- **Headline** (670, fluid 2.3rem–4.8rem, 1.02 line-height): Major Overview chapter statements and the dark closing action.
-- **Title** (690, fluid 1.55rem–2rem, 1.15 line-height): Operational page titles outside the narrative Overview.
-- **Body** (400, 14px, 1.55 line-height): Controls, table content, descriptions, and routine working copy; descriptive lines generally stop near 62–68 characters.
-- **Label** (700, 11px, 0.06em tracking, uppercase where semantic): Heartbeat labels and compact system annotations.
-- **Mono** (400, 12px, 1.55 line-height): IDs, raw snapshots, the scheduler caption, timestamps, and machine vocabulary; numeric tables use tabular figures.
+- **Display** (680, 1.85rem, 1 line-height, -0.03em tracking): The Overview's “业务总览” command title.
+- **Headline** (650, 1.75rem, 1.15 line-height, -0.025em tracking): Standard page titles across the console.
+- **Title** (650, 16px, -0.012em tracking): Signal, website, attention, and panel headings.
+- **Body** (400, 15px, 1.55 line-height): Default human-facing copy; page descriptions are commonly 14px and capped near 65–68 characters.
+- **Label** (600, 12px): Task rows, state legends, counts, timestamps, and compact evidence.
+- **Navigation** (560, 14px): Primary and management routes in the 208px rail.
+- **Mono** (400, 12px): Cron expressions, target IDs, revisions, execution IDs, and time-scale ticks; numeric evidence uses tabular figures.
 
 ### Named Rules
 
-**The One Family Rule.** Geist owns both the editorial and operational voices; hierarchy comes from scale, weight, tracking, and line-height rather than decorative font pairing.
+**The Human First Rule.** Lead with website and task language in Outfit; reveal platform vocabulary as supporting evidence rather than the first thing a user must decode.
 
-**The Machine Truth Rule.** Use mono only when the value behaves like machine evidence—IDs, payloads, code, schedules, and exact timestamps—not as general visual decoration.
+**The Mono Is Evidence Rule.** Geist Mono is for exact machine values only. Do not apply it to headings, actions, business verdicts, or general navigation.
 
 ## Layout
 
-The desktop shell is a 240px fixed Deep Rail beside a fluid workspace. A sticky 64px topbar holds page context and theme control; content is centered within a 1540px maximum and uses 24px horizontal page padding. Routine screens favor bordered ledger sections, two-column detail grids, and horizontally scrollable tables rather than dashboard tiles.
+The authenticated shell uses a fixed 208px sidebar and a 58px topbar. Main content occupies the remaining width, centers within a 1660px maximum, and uses 24px top and horizontal padding with 48px below. Primary business routes appear first; lower-frequency Cron, registration, and scheduler controls sit beneath a small “管理” divider.
 
-The Overview deliberately changes cadence. Its first viewport is a 1.35/0.65 editorial split with copy beside a grayscale signal field, contained by an 18px feature radius. Subsequent chapters use 112px–190px vertical breathing room. The operations summary is a twelve-column, gapless bento: a 1px ledger-colored grid separates contiguous paper cells. Risk items share a horizontal accordion, and the execution story pairs a pinned 0.7-width title with a 1.3-width stack.
+The Overview is a compact vertical stack with a 14px rhythm. Its command row is at least 62px high and pairs the title and business verdict with website/task counts, the last refresh time, and a refresh control. The 24-hour signal plane is one bordered object. At wide widths each task uses three columns: a 220–270px website/Cron tree, a flexible signal track with a 430px minimum, and a 170px latest-result/next-run column. The board stays horizontally comparable at a 900px minimum and vertically bounded to the smaller of 58vh or 650px. Website groups are individually collapsible; with multiple websites the highest-priority group opens first, the others begin collapsed, and the operator's choices persist locally. The website directory follows the same remembered-collapse behavior so a many-site deployment remains scannable.
 
-At 1100px the hero becomes a vertical split. At 980px routine ledger and detail grids become one column. At 860px the section headings, bento, risk accordion, and execution story linearize; pinned positioning is removed. At 767px the rail becomes an off-canvas drawer, page padding drops to 16px, and forms become one column. At 540px the hero type and padding tighten, and at 480px heartbeat cells and toolbars become fully stacked.
+Below the signal, the workbench uses a 1.55/0.75 split for website rows and the attention queue, separated by 14px. The quality strip uses two 230px blue/cyan bullet meters followed by flexible platform evidence; aggregate rates are never presented as a fabricated time-series line. At 1160px the workbench and website detail body become one column. At 900px the command row and site facts reflow. Below 900px the rail becomes an off-canvas drawer, the topbar becomes 54px, content padding becomes 18px 12px 38px, the time scale is hidden, and each task becomes a two-column mobile row with its signal trace on a full-width second line. At 520px the quality strip stacks to one column.
 
-**The Ledger Before Cards Rule.** Related facts share one bordered surface with 1px divisions; do not wrap every fact in its own floating container.
+**The One Field Rule.** Website identity, Cron branches, run points, last state, and next time belong to one continuous observation field; do not split them into separate KPI cards.
 
-**The Editorial Split Rule.** Use the asymmetric split for narrative orientation and operational explanation, not as a default template for every working page.
+**The Ten-Second Rule.** The first screen answers overall health, affected website/task, and next action without a narrative preamble or a visit to a second page.
 
 ## Elevation & Depth
 
-The system is flat by default. Tonal paper shifts, hairline borders, dark/light contrast, and image washes provide structure without ambient card shadows. The two deliberate exceptions are the scroll-stacked execution cards, which need a soft low shadow to separate overlapping planes, and alert dialogs, which need a stronger structural shadow above a 45% black overlay. Signal dots use colored outline glows as status emphasis, not surface elevation.
+The console is flat by design. Signal, website, attention, quality, and routine ledger planes explicitly remove shadows; one-pixel borders, nested hairlines, subtle OKLCH mixes, and tree geometry establish hierarchy. The login panel alone uses the theme's small structural shadow, while dialogs use a stronger modal shadow above a 45% black overlay. The topbar is opaque and has no backdrop blur.
 
 ### Shadow Vocabulary
 
-- **Stack Separation** (`0 18px 45px rgb(18 24 19 / 8%)`): Only for execution cards that overlap during the pinned scroll story.
-- **Dialog Lift** (`0 20px 55px rgba(0, 0, 0, 0.24)`): Only for modal confirmation content above its scrim.
-- **Signal Halo** (`0 0 0 8px` with a 14% status-color mix): Healthy and stale signal markers in the bento.
+- **Login Lift** (`0 1px 3px 0 hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1)`): Only the centered authentication panel.
+- **Dialog Lift** (`0 20px 55px rgba(0, 0, 0, 0.24)`): Alert and standard dialog content above the modal scrim.
 
 ### Named Rules
 
-**The Flat-by-Default Rule.** Borders and tonal adjacency establish hierarchy; shadows appear only when overlap or modal separation makes depth operationally useful.
+**The Flat Observation Rule.** Runtime surfaces stay shadowless; use border hierarchy and tonal planes unless content actually overlays the page.
 
 ## Shapes
 
-Rounded geometry is controlled and hierarchical: 8px for the brand mark, 10px for controls and navigation rows, 12px for inset informational groups, 14px for routine cards and dialogs, and 18px for feature-scale narrative structures. Pills are reserved for status badges, bar tracks, signal dots, and the inline title image. Hairline borders remain visible and warm; the bento achieves a gapless ledger by letting a 1px background show between cells.
+The form language is softly technical: 9px for the small brand signal, 10px for buttons, fields, navigation rows, and icon controls, 12px for website identity wells, 14px for operational panels and dialogs, and 16px for the login panel. Circles and full pills are limited to run points, status dots, counts, badges, and progress-like evidence. Tree trunks and branches remain square one-pixel lines.
 
-**The Radius Has Rank Rule.** A larger radius indicates a larger compositional unit; never give a small field the same 18px silhouette as a hero or narrative section.
+**The Rounded Plane Rule.** A complete operational group may use a 14px container, but its internal rows are divided by straight hairlines rather than nested rounded cards.
 
-**The Pill Has Meaning Rule.** Fully rounded forms belong to compact status, progress, signal, or inline-image elements—not ordinary cards or buttons.
+**The Node Geometry Rule.** Circles mean state or a point in time; lines mean relationship or continuity. Do not turn the website→Cron tree into ornamental blobs.
 
 ## Components
 
 ### Buttons
 
-Buttons are compact, confident controls rather than promotional capsules.
+Buttons remain standard and compact so controls do not overpower evidence.
 
-- **Shape:** Gently rounded controls (10px) with 36px default, 32px small, 44px large, and 36px icon sizes.
-- **Primary:** Signal Orange with paper-white text, 12px horizontal padding, 14px semibold type; large Overview actions use 20px horizontal padding.
-- **Hover / Focus:** Hover deepens or lightens the current fill; keyboard focus uses a two-pixel Signal Orange Focus ring with a two-pixel offset. Color, border, background, and shadow transition over 150ms. Disabled controls stay visible at 45% opacity and reject pointer events.
-- **Outline / Ghost / Danger:** Outline uses the page background and a Ledger Line, ghost gains a Muted Paper fill on hover, and danger uses Destructive Red with white text.
+- **Shape:** 10px radius; 36px default, 32px small, 44px large, and 36px icon sizes.
+- **Primary:** Terracotta Action with White on Terracotta, 12px horizontal padding, and semibold 14px type.
+- **Hover / Focus:** Filled buttons move to 88% primary color; outline and ghost buttons gain Muted Oat. Keyboard focus uses a two-pixel terracotta ring with a two-pixel offset. Background, color, border, and ring transitions run for 150ms.
+- **Danger / Disabled:** Danger uses Failure Red with white text. Disabled controls retain shape and label at 45% opacity and reject pointer events.
 
 ### Chips
 
-Status badges are semantic chips, not filters.
+Status badges are compact evidence labels, not decorative filters.
 
-- **Style:** Transparent pill, 1px Ledger Line, 8px horizontal and 2px vertical padding, 12px semibold text, and a 13px status icon.
-- **State:** Success Green, Warning Amber, Destructive Red, Unknown Violet, or Muted Ink is applied to both text and icon; the visible label always carries the meaning.
+- **Style:** Transparent pill with a one-pixel Hairline, 8px horizontal and 2px vertical padding, 12px semibold text, and a 13px status icon.
+- **State:** Text and icon inherit the semantic state color. The Chinese label always remains visible; color is supplementary.
 
 ### Cards / Containers
 
-Routine cards are quiet ledger sheets; feature cards become large narrative planes.
+Operational containers read as flat planes, not floating cards.
 
-- **Corner Style:** Routine Card radius (14px); feature and execution-stack radius (18px).
-- **Background:** Paper Card on Warm Paper, with radial Signal Orange washes used only on the Overview hero and execution stack.
-- **Shadow Strategy:** None at rest, except Stack Separation for overlapping execution cards.
-- **Border:** One-pixel Ledger Line.
-- **Internal Padding:** 20px for routine cards; feature cells use a fluid 24px–46px range, and stack cards use 26px–54px.
+- **Corner Style:** 14px panel radius.
+- **Background:** Cream Plane mixed 82% toward Warm Ground.
+- **Shadow Strategy:** None for runtime surfaces.
+- **Border:** One-pixel Hairline around the group and between its internal regions.
+- **Internal Padding:** Common heads use 14–18px; row content uses 8–16px depending on density.
 
 ### Inputs / Fields
 
-Fields are restrained, explicit, and consistent with the ledger.
+Fields use the same warm materials with a deliberately stronger outline.
 
-- **Style:** 40px height, Warm Paper fill, one-pixel Field Line, 10px radius, 12px horizontal padding, and 14px text. Textareas keep the same treatment with an 112px minimum height and vertical resize.
-- **Focus:** Border shifts to Signal Orange Focus and gains a two-pixel 25%-opacity focus ring.
-- **Error / Disabled:** Errors use Destructive Red text at 12px; disabled controls remain legible at 50% opacity.
+- **Style:** 40px height, Warm Ground fill, one-pixel Field Stroke, 10px radius, 12px horizontal padding, and 14px type. Textareas share the treatment with a 112px minimum height. Filter selects open a bounded 12px-radius popover aligned to the trigger instead of inheriting a full-width browser-native menu.
+- **Focus:** The border becomes terracotta and gains a two-pixel 25%-opacity terracotta ring.
+- **Error / Disabled:** Errors use Failure Red with 12px helper text; disabled fields retain content at 50% opacity.
 
 ### Navigation
 
-The desktop rail is fixed, dark, and compact. Links are 40px high, 10px rounded, 14px semibold, and use Rail Muted until hover; the active destination uses a 10% white fill and Rail Paper. On screens below 768px the rail translates off-canvas, a 42% black scrim appears, and a 44px menu target opens or closes the drawer.
+The 208px Quiet Sidebar is a low-contrast continuation of the canvas. Routes are 40px high with 10px corners and 14px medium Outfit. Hover uses the sidebar accent plane; the active route mixes 12% Terracotta Action into the sidebar and turns its icon and label terracotta. Below 900px the rail becomes a focus-managed drawer up to 290px wide with an inert page and a 42% black scrim.
 
 ### Tables
 
-Tables are the canonical dense ledger. Headers are 40px high with 12px semibold Muted Ink labels; cells use 12px horizontal and vertical padding. Rows divide with one-pixel Ledger Lines and gain only a 50% muted wash on hover. IDs and technical values switch to mono, while numeric columns use tabular figures.
+Tables remain the dense fallback for complete histories and technical lists. Headers are 40px high with 12px semibold Muted Taupe; cells use 12px horizontal and vertical padding. Rows are divided by Hairline and gain only a 50% Muted Oat wash on hover. IDs and schedules use Geist Mono; counts use tabular figures. Status columns show one primary chip plus one quiet line of evidence rather than stacking redundant badges. Repeated row actions collapse to labeled icon buttons with compact fixed-width columns.
 
-### Dispatch Bento
+### 24-Hour Run Signal
 
-The twelve-column Overview bento is one shared bordered object with 1px internal divisions. The primary execution-distribution cell spans seven columns and two rows; heartbeat and capacity cells occupy the remaining five-column slots. At 860px it becomes a vertical sequence with 260px minimum cells.
+The signature field uses real Execution data only. Website headers are 48px high and expose keyboard-operable expand/collapse controls plus a direct link to the website's Cron list. Cron task rows are at least 52px. A one-pixel vertical trunk at 27px and 14px horizontal branches join 9px nodes to task names and Cron expressions. The responsive event rail is 32px high; success stays on the center line, failure rises, unknown/retry wait drops, and running sits slightly high. Fixed-size circular points use state fills plus a contrasting ground stroke, while an empty rail becomes a dashed Hairline. Discrete executions are never connected into a fabricated trend line.
 
-### Execution Stack
+### Attention Queue
 
-Execution cards are sticky at 118px and separated by 28px. GSAP pins the story title, scrubs cards from 90px down / 94% scale / 45% opacity to rest, then recedes the previous card to 96% scale and 38% opacity as the next arrives. Below 860px or under reduced motion, the stack becomes ordinary document flow with no pinning or scrub animation.
+Attention rows are at least 64px and use a three-column icon/content/arrow structure. Failure, unknown, retry wait, and stale heartbeat are presented before ordinary history, with website and task context in the title and exact time/state beneath. A clear state replaces the queue with a compact green confirmation—never a fabricated zero-value metric.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** lead operational pages with real state, explicit labels, and directly actionable controls.
-- **Do** use Warm Paper, Paper Card, thin Ledger Lines, and the fixed Deep Rail as the primary material vocabulary.
-- **Do** preserve the distinction between `failed`, `unknown`, `retry_wait`, success, and neutral states in text, icon, and hue.
-- **Do** use gapless bento divisions and shared ledger containers when facts belong to one operational story.
-- **Do** keep expressive motion to the Overview narrative and provide the implemented reduced-motion and mobile linearization paths.
-- **Do** retain 44px touch targets for icon controls in the mobile shell.
+- **Do** lead the Overview with a truthful business verdict derived from live platform and Execution state.
+- **Do** preserve the website → Cron → Execution → Attempt path in labels, links, and investigation order.
+- **Do** keep every signal point, rate, count, and attention item backed by the real API.
+- **Do** reserve terracotta for action and active motion while keeping semantic outcomes distinct.
+- **Do** use Outfit for human operations language and Geist Mono for exact machine evidence.
+- **Do** collapse the 24-hour field into the implemented mobile site corridor below 900px while retaining task, state, trace, and next-run evidence.
+- **Do** keep routine controls familiar, compact, keyboard-visible, and Chinese-first.
 
 ### Don't:
 
-- **Don't** replace the dispatch ledger with a generic wall of disconnected metric cards.
-- **Don't** use Signal Orange as broad decoration or as a substitute for semantic status colors.
-- **Don't** infer success from a missing error; unknown results must remain visibly unknown.
-- **Don't** add decorative shadows to routine cards, tables, fields, or navigation.
-- **Don't** turn every border or status element into a pill; radius communicates hierarchy.
-- **Don't** keep desktop pinning, accordion expansion, or split layouts when the viewport collapses below their implemented breakpoints.
+- **Don't** reintroduce the discarded marketing hero, editorial split, oversized narrative sections, or GSAP scroll choreography.
+- **Don't** build a SaaS KPI card wall or give every entity the same visual weight.
+- **Don't** fabricate run points, business metrics, health percentages, or reassuring empty values.
+- **Don't** replace the responsive signal/tree with a decorative chart or raster image.
+- **Don't** use gradients, glass, backdrop blur, or ambient shadows on runtime surfaces.
+- **Don't** add create-or-edit Cron UI; website Registration remains the source of declared tasks.
+- **Don't** communicate status with color alone or merge failure and unknown into one generic error state.

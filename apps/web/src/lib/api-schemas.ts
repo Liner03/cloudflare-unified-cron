@@ -31,6 +31,7 @@ export const scheduleSummarySchema = z.object({
   name: z.string(),
   description: z.string(),
   targetId: z.string(),
+  isDemo: z.boolean().optional(),
   action: z.string(),
   actionVersion: z.number(),
   cronExpression: z.string(),
@@ -122,6 +123,7 @@ export const targetsSchema = z.object({
       entrypoint: z.string(),
       protocolVersion: z.number(),
       manifestRevision: z.string(),
+      isDemo: z.boolean().optional(),
       actions: z.array(
         z.object({
           name: z.string(),

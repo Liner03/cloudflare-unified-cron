@@ -85,6 +85,9 @@ export function ExecutionDetailPage() {
       <ErrorState error={query.error} retry={() => void query.refetch()} />
     );
   const execution = query.data.data;
+  const isDemo =
+    typeof execution.snapshot.targetManifestRevision === "string" &&
+    execution.snapshot.targetManifestRevision.startsWith("local-demo-");
 
   return (
     <>
@@ -100,7 +103,14 @@ export function ExecutionDetailPage() {
         title={`执行 ${shortId(execution.id)}`}
       />
       <div className="mb-5 flex flex-wrap gap-2">
-        {(execution.status === "failed" || execution.status === "unknown") &&
+        {isDemo ? (
+          <div className="demo-readonly-note">
+            <StatusBadge status="local_demo" />
+            <span>这条 Execution 仅用于本地界面演示，操作已禁用。</span>
+          </div>
+        ) : null}
+        {!isDemo &&
+        (execution.status === "failed" || execution.status === "unknown") &&
         execution.snapshot.targetActionIdempotent ? (
           <ActionConfirm
             confirmLabel="重试本次执行"
@@ -119,7 +129,8 @@ export function ExecutionDetailPage() {
             }
           />
         ) : null}
-        {["succeeded", "failed", "skipped", "cancelled"].includes(
+        {!isDemo &&
+        ["succeeded", "failed", "skipped", "cancelled"].includes(
           execution.status,
         ) ? (
           <ActionConfirm
@@ -140,7 +151,9 @@ export function ExecutionDetailPage() {
             }
           />
         ) : null}
-        {execution.status === "pending" || execution.status === "retry_wait" ? (
+        {!isDemo &&
+        (execution.status === "pending" ||
+          execution.status === "retry_wait") ? (
           <ActionConfirm
             confirmLabel="取消等待"
             danger
@@ -154,7 +167,7 @@ export function ExecutionDetailPage() {
             }
           />
         ) : null}
-        {execution.status === "unknown" ? (
+        {!isDemo && execution.status === "unknown" ? (
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline">人工核实 unknown</Button>

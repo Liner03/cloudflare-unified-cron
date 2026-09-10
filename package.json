@@ -12,6 +12,7 @@
     "dev:e2e": "pnpm --parallel --filter @unified-cron/example-worker-data --filter @unified-cron/platform --filter @unified-cron/web dev:e2e",
     "db:migrate:local": "pnpm --filter @unified-cron/example-worker-data db:migrate:local && pnpm --filter @unified-cron/platform db:migrate:local",
     "seed:local": "pnpm --filter @unified-cron/platform seed:local",
+    "seed:demo:local": "pnpm --filter @unified-cron/platform seed:demo:local",
     "targets:sync:local": "pnpm --filter @unified-cron/platform targets:sync:local",
     "targets:sync:remote": "pnpm --filter @unified-cron/platform targets:sync:remote",
     "db:migrate:remote": "pnpm --filter @unified-cron/example-worker-data db:migrate:remote && pnpm --filter @unified-cron/platform db:migrate:remote",

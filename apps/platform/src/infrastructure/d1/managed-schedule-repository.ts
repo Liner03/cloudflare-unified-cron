@@ -17,6 +17,7 @@ const scheduleRowSchema = z.object({
   name: z.string(),
   description: z.string(),
   target_id: z.string(),
+  target_manifest_revision: z.string(),
   action: z.string(),
   action_version: z.number(),
   cron_expression: z.string(),
@@ -47,6 +48,7 @@ const scheduleListRowSchema = z.object({
   name: z.string(),
   description: z.string(),
   target_id: z.string(),
+  target_manifest_revision: z.string(),
   action: z.string(),
   action_version: z.number(),
   cron_expression: z.string(),
@@ -96,7 +98,8 @@ export class ManagedScheduleRepository {
   }) {
     const result = await this.db
       .prepare(
-        `SELECT s.id, s.name, s.description, s.target_id, s.action,
+        `SELECT s.id, s.name, s.description, s.target_id,
+                t.manifest_revision AS target_manifest_revision, s.action,
                 s.action_version, s.cron_expression, s.timezone, s.enabled,
                 s.declared_enabled, s.operator_paused, s.registration_key,
                 state.target_enabled, state.dispatch_paused,
@@ -107,6 +110,7 @@ export class ManagedScheduleRepository {
                 (SELECT e.created_at FROM executions e WHERE e.schedule_id = s.id
                  ORDER BY e.created_at DESC, e.id DESC LIMIT 1) AS last_execution_at
          FROM schedules s
+         JOIN targets t ON t.id = s.target_id
          JOIN managed_schedule_effective_state state
            ON state.schedule_id = s.id
          WHERE true
@@ -235,7 +239,8 @@ export class ManagedScheduleRepository {
   private async requireManaged(id: string): Promise<ScheduleRow> {
     const value = await this.db
       .prepare(
-        `SELECT s.id, s.name, s.description, s.target_id, s.action,
+        `SELECT s.id, s.name, s.description, s.target_id,
+                t.manifest_revision AS target_manifest_revision, s.action,
                 s.action_version, s.cron_expression, s.timezone, s.enabled,
                 s.archived_at, s.revision, s.payload_json,
                 s.retry_policy_json, s.timeout_ms, s.misfire_policy,
@@ -246,6 +251,7 @@ export class ManagedScheduleRepository {
                 state.effective_enabled,
                 s.retired_at, s.created_at, s.updated_at
          FROM schedules s
+         JOIN targets t ON t.id = s.target_id
          JOIN managed_schedule_effective_state state
            ON state.schedule_id = s.id
          WHERE s.id = ? LIMIT 1`,
@@ -328,6 +334,7 @@ function serializeSchedule(row: ScheduleRow) {
     name: row.name,
     description: row.description,
     targetId: row.target_id,
+    isDemo: row.target_manifest_revision.startsWith("local-demo-"),
     action: row.action,
     actionVersion: row.action_version,
     cronExpression: row.cron_expression,
@@ -361,6 +368,7 @@ function serializeListRow(value: unknown) {
     name: row.name,
     description: row.description,
     targetId: row.target_id,
+    isDemo: row.target_manifest_revision.startsWith("local-demo-"),
     action: row.action,
     actionVersion: row.action_version,
     cronExpression: row.cron_expression,

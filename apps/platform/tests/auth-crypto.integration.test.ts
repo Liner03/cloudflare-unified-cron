@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { verifyConfiguredPassword } from "../src/infrastructure/auth/access";
+import {
+  enforceMutationRequest,
+  verifyConfiguredPassword,
+} from "../src/infrastructure/auth/access";
 
 const HASH =
   "pbkdf2-sha256$600000$MDEyMzQ1Njc4OWFiY2RlZg$YVNTOas3Ktj9Bxo0o7TgbDWqVSP6iO1YpNUrQDQGjgA";
@@ -24,5 +27,24 @@ describe("local administrator password verification", () => {
       status: 503,
       code: "AUTH_CONFIGURATION_INVALID",
     });
+  });
+
+  it("keeps production mutation origins exact", () => {
+    const request = new Request("https://cron.example.com/api/v1/auth/login", {
+      method: "POST",
+      headers: {
+        Origin: "https://www.cron.example.com",
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(() =>
+      enforceMutationRequest(request, {
+        APP_ENV: "production",
+        PUBLIC_ORIGIN: "https://cron.example.com",
+      }),
+    ).toThrow(
+      expect.objectContaining({ status: 403, code: "ORIGIN_FORBIDDEN" }),
+    );
   });
 });

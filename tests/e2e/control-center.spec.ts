@@ -1,8 +1,37 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("keeps the login layout balanced across viewport sizes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "管理员登录", exact: true }),
+  ).toBeVisible();
+
+  const viewport = page.viewportSize();
+  const signal = page.locator(".login-signal");
+  const panel = page.locator(".login-panel");
+  const form = page.locator(".login-form-wrap");
+  await expect(signal).toBeVisible();
+
+  const [panelBox, formBox] = await Promise.all([
+    panel.boundingBox(),
+    form.boundingBox(),
+  ]);
+  expect(panelBox).not.toBeNull();
+  expect(formBox).not.toBeNull();
+  if ((viewport?.width ?? 0) >= 900) {
+    expect(panelBox?.x ?? 0).toBeGreaterThan((viewport?.width ?? 0) / 2);
+    expect(formBox?.width ?? 0).toBeGreaterThanOrEqual(360);
+  } else {
+    expect(formBox?.width ?? 0).toBeGreaterThanOrEqual(
+      Math.min((viewport?.width ?? 0) - 48, 420),
+    );
+  }
+});
+
 test("authenticates and navigates the registered control plane", async ({
   page,
-  isMobile,
 }, testInfo) => {
   const expectedViewports = {
     desktop: { width: 1440, height: 900 },
@@ -16,23 +45,25 @@ test("authenticates and navigates the registered control plane", async ({
   await bootstrapRegistration(page);
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: /一个真实时钟.*驱动所有关键计划/ }),
+    page.getByRole("heading", { name: "业务总览", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("7 天执行成功率")).toBeVisible();
+  await expect(page.getByText("24 小时运行信号")).toBeVisible();
 
-  if (isMobile) await page.getByRole("button", { name: "打开导航" }).click();
+  if ((page.viewportSize()?.width ?? 0) < 900) {
+    await page.getByRole("button", { name: "打开导航" }).click();
+  }
   await page
     .getByRole("navigation", { name: "主导航" })
-    .getByRole("link", { name: "计划", exact: true })
+    .getByRole("link", { name: "所有 Cron", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "计划", exact: true }),
+    page.getByRole("heading", { name: "所有 Cron", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("E2E Health", { exact: true })).toBeVisible();
 
   await page.goto("/targets");
   await expect(
-    page.getByRole("heading", { name: "目标服务", exact: true }),
+    page.getByRole("heading", { name: "网站", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("已注册", { exact: true })).toBeVisible();
   await expect(page.getByText(/e2e-/).first()).toBeVisible();
@@ -40,6 +71,122 @@ test("authenticates and navigates the registered control plane", async ({
   await expect(
     page.getByRole("heading", { name: "管理员登录", exact: true }),
   ).toBeVisible();
+});
+
+test("uses a bounded custom menu for schedule filters", async ({ page }) => {
+  await login(page, "/schedules");
+  await bootstrapRegistration(page);
+  await page.reload();
+
+  const trigger = page.getByRole("combobox", { name: "筛选启用状态" });
+  const triggerBox = await trigger.boundingBox();
+  await trigger.click();
+  const listbox = page.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+
+  const listboxBox = await listbox.boundingBox();
+  expect(triggerBox).not.toBeNull();
+  expect(listboxBox).not.toBeNull();
+  const maximumMenuWidth =
+    (page.viewportSize()?.width ?? 0) < 480
+      ? (page.viewportSize()?.width ?? 0) - 24
+      : 320;
+  expect(listboxBox?.width ?? 0).toBeLessThanOrEqual(maximumMenuWidth + 1);
+  expect(listboxBox?.width ?? 0).toBeGreaterThanOrEqual(
+    (triggerBox?.width ?? 0) - 2,
+  );
+  await page.getByRole("option", { name: "当前被阻止" }).click();
+  await expect(page).toHaveURL(/enabled=false/);
+});
+
+test("keeps sparse execution markers circular and discrete", async ({
+  page,
+}) => {
+  await login(page, "/");
+  await mockSparseSignal(page);
+  await page.reload();
+
+  const track = page.getByRole("group", {
+    name: "稀疏任务 最近 24 小时有 2 次执行",
+  });
+  await expect(track).toBeVisible();
+  await expect(track.locator("path")).toHaveCount(0);
+
+  const markers = track.locator(".signal-execution-point");
+  await expect(markers).toHaveCount(2);
+  for (const marker of await markers.all()) {
+    const box = await marker.boundingBox();
+    expect(box).not.toBeNull();
+    expect(
+      Math.abs((box?.width ?? 0) - (box?.height ?? 0)),
+    ).toBeLessThanOrEqual(1);
+  }
+});
+
+test("renders success rates as compact visual meters", async ({ page }) => {
+  await login(page, "/");
+  await mockSparseSignal(page);
+  await page.reload();
+
+  const meters = page.getByRole("meter");
+  await expect(meters).toHaveCount(2);
+  await expect(meters.nth(0)).toHaveAttribute("aria-valuenow", "50");
+  await expect(meters.nth(1)).toHaveAttribute("aria-valuenow", "50");
+});
+
+test("collapses website signal groups and remembers the choice", async ({
+  page,
+}) => {
+  await login(page, "/");
+  await mockSparseSignal(page, true);
+  await page.reload();
+
+  const dataToggle = page.getByRole("button", {
+    name: "收起 Data Worker 的 1 个任务",
+  });
+  const searchToggle = page.getByRole("button", {
+    name: "展开 Search Worker 的 1 个任务",
+  });
+  await expect(dataToggle).toHaveAttribute("aria-expanded", "true");
+  await expect(searchToggle).toHaveAttribute("aria-expanded", "false");
+  await dataToggle.click();
+  await expect(
+    page.getByRole("button", { name: "展开 Data Worker 的 1 个任务" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await searchToggle.click();
+  await expect(
+    page.getByRole("button", { name: "收起 Search Worker 的 1 个任务" }),
+  ).toHaveAttribute("aria-expanded", "true");
+
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "展开 Data Worker 的 1 个任务" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("button", { name: "收起 Search Worker 的 1 个任务" }),
+  ).toHaveAttribute("aria-expanded", "true");
+});
+
+test("collapses target site details and remembers the choice", async ({
+  page,
+}) => {
+  await login(page, "/targets");
+  await bootstrapRegistration(page);
+  await page.reload();
+
+  const collapse = page.getByRole("button", {
+    name: "收起 Data Worker 网站详情",
+  });
+  await expect(collapse).toHaveAttribute("aria-expanded", "true");
+  await collapse.click();
+  await expect(
+    page.getByRole("button", { name: "展开 Data Worker 网站详情" }),
+  ).toHaveAttribute("aria-expanded", "false");
+
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "展开 Data Worker 网站详情" }),
+  ).toHaveAttribute("aria-expanded", "false");
 });
 
 test("reveals a Registration Token once and never lists its raw value", async ({
@@ -105,14 +252,13 @@ test("shows and clears Operator Override separately from Worker intent", async (
 
 test("keeps unknown API paths JSON and exposes mobile navigation", async ({
   page,
-  isMobile,
 }) => {
   await login(page, "/");
   const response = await page.request.get("/api/v1/not-a-route");
   expect(response.status()).toBe(404);
   expect(response.headers()["content-type"]).toContain("application/json");
 
-  if (isMobile) {
+  if ((page.viewportSize()?.width ?? 0) < 900) {
     const sidebar = page.locator(".sidebar");
     const main = page.locator("main");
     const openNavigation = page.getByRole("button", { name: "打开导航" });
@@ -182,7 +328,7 @@ test("shows dispatch pause separately from stale heartbeat", async ({
   );
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "心跳陈旧或尚未建立" }),
+    page.getByText("调度心跳需要检查", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("派发已暂停", { exact: true })).toBeVisible();
 });
@@ -304,12 +450,165 @@ function readDataString(value: unknown, key: string): string {
   throw new Error(`response did not contain data.${key}`);
 }
 
-function rateWindows() {
+function rateWindows(rate: number | null = null) {
   return (["24h", "7d", "30d"] as const).map((window) => ({
     window,
     from: new Date().toISOString(),
     to: new Date().toISOString(),
-    execution: { numerator: 0, denominator: 0, rate: null },
-    firstAttempt: { numerator: 0, denominator: 0, rate: null },
+    execution: {
+      numerator: rate === null ? 0 : 1,
+      denominator: rate === null ? 0 : 2,
+      rate,
+    },
+    firstAttempt: {
+      numerator: rate === null ? 0 : 1,
+      denominator: rate === null ? 0 : 2,
+      rate,
+    },
   }));
+}
+
+async function mockSparseSignal(page: Page, includeSecondSite = false) {
+  const now = "2026-09-10T12:00:00.000Z";
+  const earlier = "2026-09-10T06:00:00.000Z";
+  const later = "2026-09-10T10:30:00.000Z";
+  const executions = [
+    {
+      id: "signal-success",
+      scheduleId: "signal-sparse",
+      targetId: "DATA",
+      source: "cron",
+      status: "succeeded",
+      reasonCode: null,
+      scheduledFor: earlier,
+      attemptCount: 1,
+      createdAt: earlier,
+      finishedAt: earlier,
+    },
+    {
+      id: "signal-failure",
+      scheduleId: "signal-sparse",
+      targetId: "DATA",
+      source: "cron",
+      status: "failed",
+      reasonCode: null,
+      scheduledFor: later,
+      attemptCount: 1,
+      createdAt: later,
+      finishedAt: later,
+    },
+  ];
+  const schedule = {
+    id: "signal-sparse",
+    key: "signal-sparse",
+    name: "稀疏任务",
+    description: "Visual regression fixture",
+    targetId: "DATA",
+    action: "healthCheck",
+    actionVersion: 1,
+    cronExpression: "0 */6 * * *",
+    timezone: "UTC",
+    enabled: true,
+    effectiveEnabled: true,
+    blockingReasons: [],
+    declaredEnabled: true,
+    operatorPaused: false,
+    revision: 1,
+    nextRunAt: "2026-09-10T18:00:00.000Z",
+    lastExecution: { status: "failed", at: later },
+  };
+  const schedules = includeSecondSite
+    ? [
+        schedule,
+        {
+          ...schedule,
+          id: "signal-backup",
+          key: "signal-backup",
+          name: "备用任务",
+          targetId: "SEARCH",
+          lastExecution: null,
+        },
+      ]
+    : [schedule];
+  const target = {
+    id: "DATA",
+    label: "Data Worker",
+    binding: "CRON_DATA",
+    service: "worker-data",
+    entrypoint: "CronEntrypoint",
+    protocolVersion: 1,
+    manifestRevision: "data-v1",
+    actions: [],
+    registration: {
+      revision: "test",
+      workerLabel: "Data Worker",
+      registeredAt: now,
+    },
+    state: {
+      enabled: 1,
+      last_check_at: null,
+      last_check_status: null,
+      last_check_message: null,
+    },
+  };
+  const targets = includeSecondSite
+    ? [
+        target,
+        {
+          ...target,
+          id: "SEARCH",
+          label: "Search Worker",
+          binding: "CRON_SEARCH",
+          service: "worker-search",
+          manifestRevision: "search-v1",
+          registration: {
+            ...target.registration,
+            workerLabel: "Search Worker",
+          },
+        },
+      ]
+    : [target];
+
+  await page.route("**/api/v1/overview", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          schedules: {
+            active_schedules: schedules.length,
+            total_schedules: schedules.length,
+          },
+          executions24h: [
+            { status: "succeeded", count: 1 },
+            { status: "failed", count: 1 },
+          ],
+          recentExecutions: executions,
+          system: {
+            dispatch_paused: 0,
+            last_successful_tick_at: Date.parse(now),
+            last_tick_outcome: "succeeded",
+            last_tick_scheduled_at: Date.parse(now),
+            build_version: "test",
+          },
+          successRates: rateWindows(0.5),
+        },
+        meta: { serverTime: now },
+      },
+    }),
+  );
+  await page.route("**/api/v1/schedules", (route) =>
+    route.fulfill({ json: { data: schedules } }),
+  );
+  await page.route(/\/api\/v1\/executions\?/, (route) =>
+    route.fulfill({
+      json: {
+        data: executions,
+        meta: { nextCursor: null, serverTime: now },
+      },
+    }),
+  );
+  await page.route("**/api/v1/targets", (route) =>
+    route.fulfill({
+      json: { data: targets },
+    }),
+  );
 }

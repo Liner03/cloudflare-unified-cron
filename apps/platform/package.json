@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --config wrangler.local.jsonc --test-scheduled",
-    "dev:e2e": "wrangler dev --config wrangler.e2e.jsonc --test-scheduled",
+    "dev:e2e": "wrangler dev --config wrangler.e2e.jsonc --test-scheduled --var 'ADMIN_PASSWORD_HASH:pbkdf2-sha256$600000$MDEyMzQ1Njc4OWFiY2RlZg$YVNTOas3Ktj9Bxo0o7TgbDWqVSP6iO1YpNUrQDQGjgA'",
     "build": "wrangler deploy --config wrangler.dry-run.jsonc --dry-run --outdir dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "types": "wrangler types --config wrangler.local.jsonc --strict-vars false worker-configuration.d.ts",
@@ -15,6 +15,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply unified-cron-platform-local-db --local --config wrangler.local.jsonc",
     "seed:local": "wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file seed/local.sql",
+    "seed:demo:local": "wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file seed/demo.sql",
     "targets:sync:local": "wrangler d1 execute unified-cron-platform-local-db --local --config wrangler.local.jsonc --file seed/targets.sql",
     "targets:sync:remote": "wrangler d1 execute unified-cron-platform-db --remote --config wrangler.jsonc --file seed/targets.sql",
     "db:migrate:remote": "wrangler d1 migrations apply unified-cron-platform-db --remote --config wrangler.jsonc"

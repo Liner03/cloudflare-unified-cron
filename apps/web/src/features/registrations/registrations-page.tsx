@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Ban,
   Check,
   Clipboard,
   KeyRound,
@@ -151,7 +152,13 @@ export function RegistrationsPage() {
 
   const isLoading = tokens.isLoading || targets.isLoading;
   const hasError = tokens.isError || targets.isError;
-  const targetValues = targets.data?.data ?? [];
+  const targetValues = (targets.data?.data ?? []).filter(
+    (target) => !target.isDemo,
+  );
+  const realTargetIds = new Set(targetValues.map((target) => target.id));
+  const tokenValues = (tokens.data?.data ?? []).filter((token) =>
+    realTargetIds.has(token.targetId),
+  );
   const now = Date.now();
 
   return (
@@ -275,8 +282,8 @@ export function RegistrationsPage() {
             </DialogContent>
           </Dialog>
         }
-        description="业务 Worker 发布完整期望状态；管理员只管理物理 Target、Registration Token 与安全覆盖。"
-        title="注册与凭据"
+        description="低频的网站接入与凭据维护；日常运行状态请从网站和业务总览查看。"
+        title="网站接入"
       />
 
       {isLoading ? (
@@ -338,9 +345,9 @@ export function RegistrationsPage() {
                 </p>
               </div>
             </div>
-            {tokens.data.data.length === 0 ? (
+            {tokenValues.length === 0 ? (
               <EmptyState
-                description="先为一个部署白名单中的 Target 签发 Token，再将它作为 Worker Secret 分发。"
+                description="为预授权的网站 Worker 签发 Token，并将它作为 Worker Secret 分发。"
                 title="尚无 Registration Token"
               />
             ) : (
@@ -349,17 +356,17 @@ export function RegistrationsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[22%]">凭据</TableHead>
-                      <TableHead className="w-[29%]">
+                      <TableHead className="w-[35%]">
                         Target / Registration
                       </TableHead>
                       <TableHead className="w-[12%]">最近使用</TableHead>
                       <TableHead className="w-[12%]">到期</TableHead>
                       <TableHead className="w-[9%]">状态</TableHead>
-                      <TableHead className="w-[16%] text-right">操作</TableHead>
+                      <TableHead className="w-[10%] text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tokens.data.data.map((token) => {
+                    {tokenValues.map((token) => {
                       const status = token.revokedAt
                         ? "revoked"
                         : Date.parse(token.expiresAt) <= now
@@ -390,7 +397,7 @@ export function RegistrationsPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             {status === "active" ? (
-                              <div className="flex justify-end gap-1">
+                              <div className="flex justify-end gap-0.5">
                                 <ActionConfirm
                                   confirmLabel="轮换并撤销旧 Token"
                                   description="平台会原子签发替换 Token 并撤销旧值；新值仍只显示一次。"
@@ -402,10 +409,12 @@ export function RegistrationsPage() {
                                       disabled={
                                         rotate.isPending || revoke.isPending
                                       }
-                                      size="sm"
+                                      className="size-8"
+                                      size="icon"
+                                      title={`轮换 ${token.label}`}
                                       variant="ghost"
                                     >
-                                      <RotateCw size={13} /> 轮换
+                                      <RotateCw aria-hidden="true" size={14} />
                                     </Button>
                                   }
                                 />
@@ -421,10 +430,12 @@ export function RegistrationsPage() {
                                       disabled={
                                         revoke.isPending || rotate.isPending
                                       }
-                                      size="sm"
+                                      className="size-8"
+                                      size="icon"
+                                      title={`撤销 ${token.label}`}
                                       variant="ghost"
                                     >
-                                      撤销
+                                      <Ban aria-hidden="true" size={14} />
                                     </Button>
                                   }
                                 />

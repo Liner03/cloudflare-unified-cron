@@ -53,7 +53,7 @@ export function ExecutionsPage() {
   return (
     <>
       <PageHeader
-        description="Execution 保存稳定业务身份，Attempt 记录每次具体调用。时间范围、状态和来源筛选均由 API 执行。"
+        description="先处理失败与结果未知，再按网站、任务和时间调查完整运行记录。"
         title="执行记录"
       />
       <div className="toolbar">
@@ -101,7 +101,7 @@ export function ExecutionsPage() {
           <ErrorState error={query.error} retry={() => void query.refetch()} />
         ) : query.data.data.length === 0 ? (
           <EmptyState
-            description="调整筛选，或先创建一个计划并提交运行意图。"
+            description="调整筛选条件，或等待网站 Worker 的下一次自动任务运行。"
             title="没有匹配的执行记录"
           />
         ) : (

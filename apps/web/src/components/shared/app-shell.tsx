@@ -2,11 +2,11 @@ import {
   Activity,
   CalendarClock,
   Clock3,
+  Globe2,
   KeyRound,
   LogOut,
   Menu,
   Moon,
-  RadioTower,
   ServerCog,
   Sun,
   X,
@@ -16,30 +16,33 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/auth-gate";
 
-const nav = [
+const primaryNav = [
   { to: "/", label: "运行总览", icon: Activity },
-  { to: "/schedules", label: "计划", icon: CalendarClock },
+  { to: "/targets", label: "网站", icon: Globe2 },
   { to: "/executions", label: "执行记录", icon: Clock3 },
-  { to: "/targets", label: "目标服务", icon: RadioTower },
-  { to: "/registrations", label: "注册与凭据", icon: KeyRound },
-  { to: "/system", label: "系统", icon: ServerCog },
+];
+
+const secondaryNav = [
+  { to: "/schedules", label: "所有 Cron", icon: CalendarClock },
+  { to: "/registrations", label: "网站接入", icon: KeyRound },
+  { to: "/system", label: "调度设置", icon: ServerCog },
 ];
 
 const titles: Record<string, string> = {
   "/": "运行总览",
-  "/schedules": "计划",
+  "/schedules": "所有 Cron",
   "/executions": "执行记录",
-  "/targets": "目标服务",
-  "/registrations": "注册与凭据",
-  "/system": "系统",
+  "/targets": "网站",
+  "/registrations": "网站接入",
+  "/system": "调度设置",
 };
 
 function useMobileViewport(): boolean {
   const [mobile, setMobile] = useState(
-    () => window.matchMedia("(max-width: 767px)").matches,
+    () => window.matchMedia("(max-width: 899px)").matches,
   );
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 767px)");
+    const query = window.matchMedia("(max-width: 899px)");
     const update = (event: MediaQueryListEvent) => setMobile(event.matches);
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
@@ -113,15 +116,15 @@ export function AppShell() {
           <div aria-hidden="true" className="brand-mark" />
           <div>
             <div className="text-sm font-semibold leading-tight">
-              Cron Control
+              Worker 控制台
             </div>
             <div className="mt-0.5 text-[11px] text-[var(--sidebar-muted)]">
-              Unified scheduler
+              网站自动任务
             </div>
           </div>
           <Button
             aria-label="关闭导航"
-            className="ml-auto size-11 text-[var(--sidebar-muted)] md:hidden"
+            className="ml-auto size-11 text-[var(--sidebar-muted)] min-[900px]:hidden"
             onClick={() => setMenuOpen(false)}
             ref={closeButton}
             size="icon"
@@ -132,8 +135,15 @@ export function AppShell() {
           </Button>
         </div>
         <nav aria-label="主导航" className="sidebar-nav">
-          {nav.map(({ to, label, icon: Icon }) => (
+          {primaryNav.map(({ to, label, icon: Icon }) => (
             <NavLink className="nav-link" end={to === "/"} key={to} to={to}>
+              <Icon aria-hidden="true" size={17} strokeWidth={1.8} />
+              {label}
+            </NavLink>
+          ))}
+          <div className="sidebar-nav-label">管理</div>
+          {secondaryNav.map(({ to, label, icon: Icon }) => (
+            <NavLink className="nav-link" key={to} to={to}>
               <Icon aria-hidden="true" size={17} strokeWidth={1.8} />
               {label}
             </NavLink>
@@ -141,9 +151,9 @@ export function AppShell() {
         </nav>
         <div className="sidebar-foot">
           <div className="mb-1 flex items-center gap-2 font-semibold text-[var(--sidebar-foreground)]">
-            单账号控制面
+            一个时钟，多站运行
           </div>
-          一个原生 Cron · D1 · RPC
+          Cloudflare Cron · D1 · RPC
         </div>
       </aside>
       <main

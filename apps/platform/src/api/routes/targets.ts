@@ -11,7 +11,9 @@ import type { ApiRouter } from "../router";
 export function registerTargetRoutes(app: ApiRouter): void {
   app.get("/targets", async (context) => {
     return context.json({
-      data: await new TargetRepository(context.env.DB).list(),
+      data: await new TargetRepository(context.env.DB).list({
+        includeLocalDemoTargets: String(context.env.APP_ENV) !== "production",
+      }),
     });
   });
 
