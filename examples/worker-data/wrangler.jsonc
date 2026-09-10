@@ -14,8 +14,11 @@
       "migrations_dir": "migrations",
     },
   ],
-  "secrets": { "required": ["REGISTRATION_TOKEN"] },
+  "secrets": {
+    "required": ["REGISTRATION_TOKEN", "TEST_CONTROL_SECRET"],
+  },
   "vars": {
+    "APP_ENV": "staging",
     "BUILD_ID": "REPLACE_WITH_BUILD_ID",
     "PLATFORM_REGISTRATION_URL": "https://cron.example.com/api/v1/registration",
   },

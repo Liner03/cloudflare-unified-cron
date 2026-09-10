@@ -12,8 +12,10 @@ export default defineConfig(async () => {
         wrangler: { configPath: "./wrangler.local.jsonc" },
         miniflare: {
           bindings: {
+            APP_ENV: "test",
             TEST_MIGRATIONS: migrations,
             REGISTRATION_TOKEN: `ucrt_${"t".repeat(43)}`,
+            TEST_CONTROL_SECRET: "local-test-control-secret",
           },
           compatibilityFlags: ["service_binding_extra_handlers"],
         },
