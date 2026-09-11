@@ -123,6 +123,30 @@ describe("registered control plane API", () => {
     });
   });
 
+  it("replays Registration requests and rejects key reuse with another body", async () => {
+    const token = await issuedToken();
+    const key = `registration:${crypto.randomUUID()}`;
+    const first = await register(token, baseRegistration, key);
+    const firstBody = await first.json();
+    expect(first.status).toBe(200);
+
+    const replay = await register(token, baseRegistration, key);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(firstBody);
+
+    const conflict = await register(
+      token,
+      { ...baseRegistration, worker: { label: "Different body" } },
+      key,
+    );
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    expect(await count("registrations")).toBe(1);
+    expect(await count("schedules")).toBe(1);
+  });
+
   it("treats nested JSON key order as the same Registration document", async () => {
     const token = await issuedToken();
     const first = await register(token, {
@@ -718,14 +742,18 @@ async function issuedToken(): Promise<string> {
   return readString(await response.json(), "token");
 }
 
-function register(token: string, declaration: unknown): Promise<Response> {
+function register(
+  token: string,
+  declaration: unknown,
+  key = `register:${crypto.randomUUID()}`,
+): Promise<Response> {
   return exports.default.fetch(
     new Request("http://localhost/api/v1/registration", {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        "Idempotency-Key": `register:${crypto.randomUUID()}`,
+        "Idempotency-Key": key,
       },
       body: JSON.stringify(declaration),
     }),
@@ -747,7 +775,9 @@ function readString(value: unknown, key: string): string {
   throw new Error(`response did not contain data.${key}`);
 }
 
-async function count(table: "schedules" | "registered_actions" | "attempts") {
+async function count(
+  table: "schedules" | "registered_actions" | "attempts" | "registrations",
+) {
   const row = await env.DB.prepare(
     `SELECT COUNT(*) AS count FROM ${table}`,
   ).first<{

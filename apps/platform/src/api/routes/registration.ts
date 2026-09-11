@@ -43,7 +43,10 @@ export function registerWorkerRegistrationRoute(app: ApiRouter): void {
     const result = await new RegistrationRepository(
       context.env.DB,
       new CronCalculator(),
-    ).apply(principal, declaration);
+    ).apply(principal, declaration, {
+      key: idempotencyKey,
+      rawBody: body.raw,
+    });
     return context.json({ data: result });
   });
 }

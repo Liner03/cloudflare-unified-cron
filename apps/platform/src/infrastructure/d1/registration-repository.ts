@@ -25,6 +25,20 @@ const historicalRevisionSchema = z.object({
 });
 
 const countSchema = z.object({ count: z.number() });
+const storedIdempotencySchema = z.object({
+  request_hash: z.string(),
+  response_json: z.string(),
+});
+const appliedRegistrationSchema = z.object({
+  targetId: z.string(),
+  registrationRevision: z.string(),
+  unchanged: z.boolean(),
+  actions: z.number().int().min(0),
+  schedules: z.number().int().min(0),
+  retiredSchedules: z.number().int().min(0),
+  registeredAt: z.string(),
+});
+const REGISTRATION_IDEMPOTENCY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface RegistrationPrincipal {
   tokenId: string;
@@ -41,6 +55,15 @@ export interface AppliedRegistration {
   registeredAt: string;
 }
 
+interface PreparedRegistrationIdempotency {
+  scope: string;
+  key: string;
+  requestHash: string;
+  now: number;
+}
+
+type StoredRegistrationIdempotency = z.infer<typeof storedIdempotencySchema>;
+
 /**
  * Applies one Registrant Worker's full desired state as a bounded D1 transaction.
  * The interface hides hashing, optimistic concurrency, bulk SQL, retirement, and
@@ -55,6 +78,7 @@ export class RegistrationRepository {
   async apply(
     principal: RegistrationPrincipal,
     declaration: WorkerRegistrationV1,
+    idempotencyInput?: { key: string; rawBody: Uint8Array },
   ): Promise<AppliedRegistration> {
     if (!getTargetManifest(principal.targetId)) {
       throw new DomainError(
@@ -79,6 +103,12 @@ export class RegistrationRepository {
       canonicalRegistrationDocument(declaration),
     );
     const now = Date.now();
+    const idempotencyState =
+      idempotencyInput === undefined
+        ? null
+        : await this.prepareIdempotency(principal, idempotencyInput, now);
+    if (idempotencyState?.replay) return idempotencyState.replay;
+    const idempotency = idempotencyState?.prepared ?? null;
     const [currentValue, historicalValue, otherScheduleCountValue] =
       await Promise.all([
         this.db
@@ -122,18 +152,20 @@ export class RegistrationRepository {
       current?.registration_revision === declaration.registrationRevision &&
       current.document_hash === documentHash
     ) {
-      await this.confirmNoopRegistration(
-        principal,
-        declaration.registrationRevision,
-        documentHash,
-        now,
-      );
-      return resultView(
+      const result = resultView(
         principal.targetId,
         declaration,
         true,
         0,
         current.registered_at,
+      );
+      return this.confirmNoopRegistration(
+        principal,
+        declaration.registrationRevision,
+        documentHash,
+        now,
+        result,
+        idempotency,
       );
     }
 
@@ -198,7 +230,17 @@ export class RegistrationRepository {
       .first();
     const retiredSchedules = countSchema.parse(retiredValue).count;
 
+    const result = resultView(
+      principal.targetId,
+      declaration,
+      false,
+      retiredSchedules,
+      now,
+    );
     const statements: D1PreparedStatement[] = [
+      ...(idempotency === null
+        ? []
+        : [this.idempotencyStatement(idempotency, result)]),
       this.activeTokenGuard(principal, now),
       ...this.revisionGuardStatements(
         principal,
@@ -392,6 +434,14 @@ export class RegistrationRepository {
     try {
       await this.db.batch(statements);
     } catch (error) {
+      if (idempotency !== null) {
+        const raced = await this.readIdempotency(
+          idempotency.scope,
+          idempotency.key,
+          idempotency.now,
+        );
+        if (raced) return replayIdempotency(raced, idempotency.requestHash);
+      }
       return this.rethrowRegistrationError(
         error,
         principal,
@@ -401,13 +451,7 @@ export class RegistrationRepository {
         declaration.schedules.length,
       );
     }
-    return resultView(
-      principal.targetId,
-      declaration,
-      false,
-      retiredSchedules,
-      now,
-    );
+    return result;
   }
 
   private async confirmNoopRegistration(
@@ -415,9 +459,14 @@ export class RegistrationRepository {
     registrationRevision: string,
     documentHash: string,
     now: number,
-  ): Promise<void> {
+    result: AppliedRegistration,
+    idempotency: PreparedRegistrationIdempotency | null,
+  ): Promise<AppliedRegistration> {
     try {
       await this.db.batch([
+        ...(idempotency === null
+          ? []
+          : [this.idempotencyStatement(idempotency, result)]),
         this.activeTokenGuard(principal, now),
         ...this.revisionGuardStatements(
           principal,
@@ -441,6 +490,14 @@ export class RegistrationRepository {
           .bind(now, principal.tokenId),
       ]);
     } catch (error) {
+      if (idempotency !== null) {
+        const raced = await this.readIdempotency(
+          idempotency.scope,
+          idempotency.key,
+          idempotency.now,
+        );
+        if (raced) return replayIdempotency(raced, idempotency.requestHash);
+      }
       return this.rethrowRegistrationError(
         error,
         principal,
@@ -449,6 +506,7 @@ export class RegistrationRepository {
         now,
       );
     }
+    return result;
   }
 
   private async rethrowRegistrationError(
@@ -514,6 +572,68 @@ export class RegistrationRepository {
       );
     }
     throw error;
+  }
+
+  private async prepareIdempotency(
+    principal: RegistrationPrincipal,
+    input: { key: string; rawBody: Uint8Array },
+    now: number,
+  ): Promise<{
+    prepared: PreparedRegistrationIdempotency | null;
+    replay: AppliedRegistration | null;
+  }> {
+    const scope = `registration-token:${principal.tokenId}:PUT:/api/v1/registration`;
+    const requestHash = await sha256Bytes(input.rawBody);
+    const stored = await this.readIdempotency(scope, input.key, now);
+    if (stored) {
+      return {
+        prepared: null,
+        replay: replayIdempotency(stored, requestHash),
+      };
+    }
+    return {
+      prepared: { scope, key: input.key, requestHash, now },
+      replay: null,
+    };
+  }
+
+  private readIdempotency(
+    scope: string,
+    key: string,
+    now: number,
+  ): Promise<StoredRegistrationIdempotency | null> {
+    return this.db
+      .prepare(
+        `SELECT request_hash, response_json
+         FROM api_idempotency
+         WHERE scope = ? AND key = ? AND expires_at > ?`,
+      )
+      .bind(scope, key, now)
+      .first()
+      .then((value) =>
+        value === null ? null : storedIdempotencySchema.parse(value),
+      );
+  }
+
+  private idempotencyStatement(
+    input: PreparedRegistrationIdempotency,
+    result: AppliedRegistration,
+  ): D1PreparedStatement {
+    return this.db
+      .prepare(
+        `INSERT INTO api_idempotency (
+           scope, key, request_hash, status_code, response_json,
+           created_at, expires_at
+         ) VALUES (?, ?, ?, 200, ?, ?, ?)`,
+      )
+      .bind(
+        input.scope,
+        input.key,
+        input.requestHash,
+        JSON.stringify(result),
+        input.now,
+        input.now + REGISTRATION_IDEMPOTENCY_TTL_MS,
+      );
   }
 
   private activeTokenGuard(
@@ -598,4 +718,27 @@ function scheduleLimitReached(): DomainError {
     "SCHEDULE_LIMIT_REACHED",
     "平台最多管理 50 个未退役 Schedule",
   );
+}
+
+function replayIdempotency(
+  stored: StoredRegistrationIdempotency,
+  requestHash: string,
+): AppliedRegistration {
+  if (stored.request_hash !== requestHash) {
+    throw new DomainError(
+      "conflict",
+      "IDEMPOTENCY_CONFLICT",
+      "相同 Idempotency-Key 已用于不同请求体",
+    );
+  }
+  return appliedRegistrationSchema.parse(JSON.parse(stored.response_json));
+}
+
+async function sha256Bytes(value: Uint8Array): Promise<string> {
+  const bytes = new Uint8Array(value.byteLength);
+  bytes.set(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes.buffer);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
