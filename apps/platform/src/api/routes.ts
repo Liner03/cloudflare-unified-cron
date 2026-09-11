@@ -17,7 +17,9 @@ import {
 const app = createApiRouter();
 
 app.use("*", async (context, next) => {
-  context.set("requestId", crypto.randomUUID());
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  context.set("requestId", requestId);
   await next();
   context.res.headers.set("Cache-Control", "no-store");
   context.res.headers.set("X-Content-Type-Options", "nosniff");
@@ -25,6 +27,17 @@ app.use("*", async (context, next) => {
   context.res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'",
+  );
+  console.log(
+    JSON.stringify({
+      event: "api_request",
+      requestId,
+      method: context.req.method,
+      path: new URL(context.req.url).pathname,
+      status: context.res.status,
+      buildVersion: context.env.BUILD_VERSION,
+      durationMs: Date.now() - startedAt,
+    }),
   );
 });
 
