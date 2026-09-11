@@ -1,10 +1,9 @@
 import type { MiddlewareHandler } from "hono";
-import { pbkdf2 } from "node:crypto";
+import { pbkdf2, timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { ApiError } from "../../api/errors";
 import { ADMIN_SESSION_TTL_MS } from "../../domain/auth";
 import { AdminSessionRepository } from "../d1/admin-session-repository";
-import { timingSafeEqual } from "../security/crypto";
 
 const MIN_PBKDF2_ITERATIONS = 600_000;
 const derivePbkdf2 = promisify(pbkdf2);
@@ -62,16 +61,22 @@ export async function verifyConfiguredPassword(
   ) {
     throw invalidAuthConfiguration();
   }
-  const derived = await derivePbkdf2(
-    suppliedPassword,
-    salt,
-    iterations,
-    expected.byteLength,
-    "sha256",
-  );
-  const derivedBytes = new Uint8Array(derived.byteLength);
-  derivedBytes.set(derived);
-  return timingSafeEqual(derivedBytes.buffer, new Uint8Array(expected).buffer);
+  try {
+    const derived = await derivePbkdf2(
+      suppliedPassword,
+      salt,
+      iterations,
+      expected.byteLength,
+      "sha256",
+    );
+    return nodeTimingSafeEqual(derived, Buffer.from(expected));
+  } catch {
+    throw new ApiError(
+      503,
+      "AUTH_CRYPTO_UNAVAILABLE",
+      "管理员密码校验暂时不可用",
+    );
+  }
 }
 
 export async function createAdminSession(
