@@ -102,6 +102,47 @@ describe("worker sdk", () => {
     } satisfies Partial<RegistrationError>);
   });
 
+  it("uses a fresh idempotency key for each intended Registration publish", async () => {
+    const keys: string[] = [];
+    const fetcher = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      keys.push(headers.get("Idempotency-Key") ?? "");
+      return Promise.resolve(
+        Response.json({
+          data: {
+            targetId: "DATA",
+            registrationRevision: "build-123",
+            unchanged: false,
+            actions: 0,
+            schedules: 0,
+            retiredSchedules: 0,
+            registeredAt: "2026-09-09T00:00:00.000Z",
+          },
+        }),
+      );
+    });
+    const client = createRegistrationClient({
+      endpoint: "https://cron.example.com/api/v1/registration",
+      token: `ucrt_${"d".repeat(43)}`,
+      fetcher,
+    });
+    const declaration = {
+      protocolVersion: 1 as const,
+      registrationRevision: "build-123",
+      worker: { label: "Data Worker" },
+      actions: [],
+      schedules: [],
+    };
+
+    await client.register(declaration);
+    await client.register(declaration);
+
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(/^registration:[0-9a-f-]{36}$/);
+    expect(keys[1]).toMatch(/^registration:[0-9a-f-]{36}$/);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
   it("rejects malformed and oversized registration responses", async () => {
     const declaration = {
       protocolVersion: 1 as const,

@@ -2,7 +2,6 @@ import {
   BoundedJsonError,
   readBoundedJson,
   workerRegistrationV1Schema,
-  type WorkerRegistrationV1,
   type WorkerRegistrationV1Input,
 } from "@unified-cron/contracts";
 import { z } from "zod";
@@ -68,7 +67,7 @@ export function createRegistrationClient(options: {
         headers: {
           Authorization: `Bearer ${options.token}`,
           "Content-Type": "application/json",
-          "Idempotency-Key": await registrationIdempotencyKey(declaration),
+          "Idempotency-Key": registrationIdempotencyKey(),
         },
         body: JSON.stringify(declaration),
       });
@@ -112,19 +111,8 @@ function validateRegistrationEndpoint(value: string): string {
   return url.toString();
 }
 
-async function registrationIdempotencyKey(
-  declaration: WorkerRegistrationV1,
-): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(
-      `${declaration.registrationRevision}:${JSON.stringify(declaration)}`,
-    ),
-  );
-  const suffix = Array.from(new Uint8Array(digest).slice(0, 16), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-  return `registration:${suffix}`;
+function registrationIdempotencyKey(): string {
+  return `registration:${crypto.randomUUID()}`;
 }
 
 async function readRegistrationResponse(response: Response): Promise<unknown> {
