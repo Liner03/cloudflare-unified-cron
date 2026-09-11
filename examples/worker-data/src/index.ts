@@ -469,6 +469,9 @@ async function handleTestControl(
     ).all();
     return Response.json({ data: result.results });
   }
+  if (request.method === "POST" && path === "/__test/register") {
+    return Response.json({ data: await publishRegistration(env) });
+  }
   if (request.method === "POST" && path === "/__test/reset") {
     await env.BUSINESS_DB.batch([
       env.BUSINESS_DB.prepare("DELETE FROM scenario_queue"),
