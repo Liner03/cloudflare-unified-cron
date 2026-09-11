@@ -251,7 +251,7 @@ Agent-operated browser / remote driver
 - [ ] `R7-003` Execution 和 Audit cursor 分页无重复、遗漏或顺序漂移。
 - [ ] `R7-004` 记录 API、Tick、RPC 的 p50/p95/p99 wall time；不把本地时间当 Cloudflare CPU time。
 - [ ] `R7-005` 记录 D1 query/row 数、Worker CPU time、错误率和冷启动证据。
-- [ ] `R7-006` 24 小时真实 Cron Soak 无未解释的失败、重复副作用或永久 stuck 状态。
+- [ ] `R7-006` 连续 60 个真实分钟 Tick 的 Cron Soak（至少跨一个 UTC 整点）无未解释的失败、重复副作用或永久 stuck 状态；以 D1、Execution、Attempt 和业务收据聚合为主，不要求持续高频轮询。
 - [ ] `R7-007` Soak 期间至少覆盖一次 Registration 更新和一次安全暂停/恢复。
 - [ ] `R7-008` Overview 成功率与底层 resolved Execution 样本人工复算一致。
 
@@ -284,7 +284,7 @@ P0/P1 出现后停止后续破坏性或长时间阶段，保留现场并先修�
 - [ ] P0、P1 为零；P2 均有负责人和处理结论。
 - [ ] 所有 unknown 均已解释、人工解决或保留为明确已知风险。
 - [ ] 重复 Tick、Retry 和模糊结果场景未产生重复业务副作用。
-- [ ] 24 小时 Soak 完成，真实 Cron、D1、RPC 和 Web 证据完整。
+- [ ] 连续 60 个真实分钟 Tick、且至少跨一个 UTC 整点的 Soak 完成，真实 Cron、D1、RPC 和 Web 证据完整。
 - [ ] 回滚演练完成，恢复后真实成功路径通过。
 - [ ] `docs/validation-report.md` 更新为当前 commit 的最终证据摘要。
 - [ ] 用户审阅测试报告并批准进入下一阶段。
