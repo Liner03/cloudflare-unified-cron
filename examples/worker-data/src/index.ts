@@ -537,6 +537,17 @@ export default {
         return Response.json({ error: code }, { status: 400 });
       }
     }
-    return Response.json({ service: "worker-data", websitePreserved: true });
+    console.log(
+      JSON.stringify({
+        event: "test_target_http",
+        buildId: env.BUILD_ID,
+        path: new URL(request.url).pathname,
+      }),
+    );
+    return Response.json({
+      service: "worker-data",
+      websitePreserved: true,
+      buildId: env.BUILD_ID,
+    });
   },
 } satisfies ExportedHandler<Env>;

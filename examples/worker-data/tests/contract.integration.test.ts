@@ -22,6 +22,7 @@ describe("named CronEntrypoint contract", () => {
     await expect(response.json()).resolves.toEqual({
       service: "worker-data",
       websitePreserved: true,
+      buildId: "local",
     });
 
     const description = await Promise.resolve(
