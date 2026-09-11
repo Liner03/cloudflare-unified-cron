@@ -650,6 +650,40 @@ describe("registered control plane API", () => {
     });
   });
 
+  it("requires valid idempotency keys for every authenticated POST", async () => {
+    const before = await count("registration_tokens");
+    const missing = await exports.default.fetch(
+      new Request("http://localhost/api/v1/registration-tokens", {
+        method: "POST",
+        headers: {
+          Cookie: adminCookie,
+          Origin: "http://localhost:8787",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          targetId: "DATA",
+          label: "missing key",
+          expiresInDays: 1,
+        }),
+      }),
+    );
+    expect(missing.status).toBe(422);
+    await expect(missing.json()).resolves.toMatchObject({
+      error: { code: "IDEMPOTENCY_KEY_REQUIRED" },
+    });
+
+    const invalid = await adminMutateWithKey(
+      "/api/v1/cron/preview",
+      { cronExpression: "* * * * *", timezone: "UTC", count: 1 },
+      "bad",
+    );
+    expect(invalid.status).toBe(422);
+    await expect(invalid.json()).resolves.toMatchObject({
+      error: { code: "IDEMPOTENCY_KEY_REQUIRED" },
+    });
+    expect(await count("registration_tokens")).toBe(before);
+  });
+
   it("reports execution and first-attempt success rates with an explicit sample", async () => {
     const token = await issuedToken();
     await register(token, baseRegistration);
@@ -790,7 +824,12 @@ function readString(value: unknown, key: string): string {
 }
 
 async function count(
-  table: "schedules" | "registered_actions" | "attempts" | "registrations",
+  table:
+    | "schedules"
+    | "registered_actions"
+    | "attempts"
+    | "registrations"
+    | "registration_tokens",
 ) {
   const row = await env.DB.prepare(
     `SELECT COUNT(*) AS count FROM ${table}`,

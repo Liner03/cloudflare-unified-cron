@@ -13,6 +13,7 @@ import {
   authenticate,
   enforceMutationRequest,
 } from "../infrastructure/auth/access";
+import { requireIdempotencyKey } from "./idempotent-mutation";
 
 const app = createApiRouter();
 
@@ -52,6 +53,7 @@ app.use("*", authenticate);
 app.use("*", async (context, next) => {
   if (!["GET", "HEAD", "OPTIONS"].includes(context.req.method)) {
     enforceMutationRequest(context.req.raw, context.env);
+    requireIdempotencyKey(context.req.raw);
   }
   await next();
 });

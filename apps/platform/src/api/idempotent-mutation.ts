@@ -12,14 +12,7 @@ export async function executeIdempotentMutation(
   rawBody: Uint8Array,
   createPlan: () => Promise<MutationPlan> | MutationPlan,
 ): Promise<Response> {
-  const key = context.req.header("Idempotency-Key");
-  if (!key || !/^[A-Za-z0-9._:-]{8,128}$/.test(key)) {
-    throw new ApiError(
-      422,
-      "IDEMPOTENCY_KEY_REQUIRED",
-      "写操作需要 8..128 字符的 Idempotency-Key",
-    );
-  }
+  const key = requireIdempotencyKey(context.req.raw);
   const actor = context.get("actor");
   const outcome = await new IdempotentMutationRepository(
     context.env.DB,
@@ -40,4 +33,16 @@ export async function executeIdempotentMutation(
       "Cache-Control": "no-store",
     },
   });
+}
+
+export function requireIdempotencyKey(request: Request): string {
+  const key = request.headers.get("Idempotency-Key");
+  if (!key || !/^[A-Za-z0-9._:-]{8,128}$/.test(key)) {
+    throw new ApiError(
+      422,
+      "IDEMPOTENCY_KEY_REQUIRED",
+      "写操作需要 8..128 字符的 Idempotency-Key",
+    );
+  }
+  return key;
 }
