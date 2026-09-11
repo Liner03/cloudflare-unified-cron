@@ -272,7 +272,7 @@ export function publishRegistration(env: Env) {
           delaysSeconds: [60],
           retryOnUnknown: false,
         },
-        timeoutMs: 1_000,
+        timeoutMs: 5_000,
       },
       {
         key: "non-idempotent-scenario",
@@ -289,7 +289,7 @@ export function publishRegistration(env: Env) {
           delaysSeconds: [],
           retryOnUnknown: false,
         },
-        timeoutMs: 1_000,
+        timeoutMs: 5_000,
       },
     ],
   });
