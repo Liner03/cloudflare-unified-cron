@@ -83,7 +83,7 @@ export class TickApplication {
             execution,
             this.clock.nowMs(),
           );
-          if (claimed) tasks.push(this.dispatch(claimed));
+          if (claimed) tasks.push(this.dispatch(claimed, tickId));
         }
         const results = await Promise.allSettled(tasks);
         for (const result of results) {
@@ -133,8 +133,20 @@ export class TickApplication {
     return { tickId, outcome, materialized, dispatched, recovered, errors };
   }
 
-  private async dispatch(claim: ClaimedExecution): Promise<boolean> {
+  private async dispatch(
+    claim: ClaimedExecution,
+    tickId: string,
+  ): Promise<boolean> {
     const snapshot = parseSnapshot(claim.snapshot_json);
+    console.log(
+      JSON.stringify({
+        event: "tick_dispatch_started",
+        tickId,
+        executionId: claim.id,
+        attemptId: claim.attempt_id,
+        targetId: claim.target_id,
+      }),
+    );
     const capability = await this.targets.findCapability(
       claim.target_id,
       snapshot.action,
@@ -241,6 +253,18 @@ export class TickApplication {
       claim,
       decision,
       this.clock.nowMs(),
+    );
+    console.log(
+      JSON.stringify({
+        event: "tick_dispatch_finished",
+        tickId,
+        executionId: claim.id,
+        attemptId: claim.attempt_id,
+        targetId: claim.target_id,
+        executionStatus: decision.executionStatus,
+        attemptStatus: decision.attemptStatus,
+        finalized,
+      }),
     );
     if (!finalized) {
       console.warn(
