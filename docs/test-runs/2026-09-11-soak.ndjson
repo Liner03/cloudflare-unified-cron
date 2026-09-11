@@ -1,0 +1,2 @@
+{"event":"soak_started","startAt":"2026-09-11T07:10:00.000Z","endAt":"2026-09-11T08:10:00.000Z","polling":"authenticated /api/v1/system every 50 seconds"}
+{"event":"soak_finished","startAt":"2026-09-11T07:10:00.000Z","endAt":"2026-09-11T08:10:00.000Z","observedAt":"2026-09-11T08:11:57.650Z","ticks":51,"uniqueTickIds":51,"outcomes":{"succeeded":51},"nonMinuteGapCount":0,"nonMinuteGapsMs":[],"tickWallTimeMs":{"samples":51,"p50":3201,"p95":3920,"p99":4718,"min":3062,"max":4718},"pollErrors":0}

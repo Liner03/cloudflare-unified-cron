@@ -2,7 +2,7 @@
 
 后续验证以 [测试执行计划](test-plan.md) 为执行清单；本文只记录已经完成并有证据支持的结果。
 
-日期：2026-09-10。环境：macOS arm64、Node.js 24.19.0、pnpm 11.21.0、Wrangler 4.129.1。
+日期：2026-09-11。环境：macOS arm64、Node.js 24.19.0、pnpm 11.21.0、Wrangler 4.129.1；本地与隔离 Cloudflare Staging。
 
 ## 聚合结果
 
@@ -14,16 +14,16 @@ CI=true pnpm verify
 
 ## 自动化测试
 
-| 层级                            |      结果 | 关键范围                                                                                         |
-| ------------------------------- | --------: | ------------------------------------------------------------------------------------------------ |
-| Contracts unit                  |  7 passed | RPC identity、retry schema、完整 Registration、unsafe retry 与共享 bounded JSON reader           |
-| Worker SDK unit                 | 10 passed | Cron envelope、多版本、独立 Registration client、响应大小/JSON 错误与 credential header          |
-| Platform unit                   | 32 passed | Cron/DST、规范化 Registration、retry policy、成功 output、Target check、架构守卫、Node 版本      |
-| Platform workerd/D1 integration | 39 passed | 本地认证、规范化 hash、容量 UPSERT/trigger、统一有效状态、Token rotation、reconcile、claim/lease |
-| Example Worker RPC integration  |  2 passed | default fetch 保留、命名 Entrypoint、业务 D1 幂等、Attempt 身份重包装                            |
-| Playwright E2E                  | 15 passed | 1440/768/390px、本地登录、Token 签发/轮换一次性展示、注册状态、Operator Override、移动导航       |
+| 层级                            |      结果 | 关键范围                                                                                     |
+| ------------------------------- | --------: | -------------------------------------------------------------------------------------------- |
+| Contracts unit                  |  7 passed | RPC identity、retry schema、完整 Registration、unsafe retry 与共享 bounded JSON reader       |
+| Worker SDK unit                 | 11 passed | Cron envelope、Registration client、每次有意发布独立 key、响应边界与 credential header       |
+| Platform unit                   | 34 passed | Cron/DST、规范化 Registration、retry policy、Target check、架构守卫、认证与 Node 版本        |
+| Platform workerd/D1 integration | 49 passed | 认证、Registration/Token mutation 幂等、容量、事务、override、reconcile、claim/lease、成功率 |
+| Example Worker RPC integration  |  9 passed | 十种确定性模式、命名 Entrypoint、业务 D1 幂等、Attempt identity、受保护控制 API              |
+| Playwright E2E                  | 33 passed | 1440/768/390px 登录、Token、注册状态、Operator Override、错误恢复、导航与响应式布局          |
 
-自动化测试合计 105 项通过。
+自动化测试合计 143 项通过。最终修复后的 `pnpm verify` 从头到尾退出码为 0。
 
 核心 domain + CronCalculator V8 覆盖率：
 
@@ -69,9 +69,9 @@ env.CRON_DATA (worker-data-local#CronEntrypoint) Worker local [connected]
 
 ## 构建与路由
 
-- 示例 Worker dry-run：755.82 KiB，gzip 116.76 KiB。
-- 平台 Worker + 28 个 Static Assets dry-run：1313.59 KiB，gzip 227.63 KiB。
-- Vite 主入口：530.79 KiB，gzip 164.04 KiB；页面按 route code-split。
+- 示例 Worker dry-run：767.19 KiB，gzip 119.21 KiB。
+- 平台 Worker + 32 个 Static Assets dry-run：1326.68 KiB，gzip 229.92 KiB。
+- Vite 主入口：533.71 KiB，gzip 164.98 KiB；页面按 route code-split。
 - `wrangler check startup` 本地 profile：27.3 ms window，12.6 ms active（含 2.5 ms GC）。该值只用于定位本机启动开销，不代表 Cloudflare CPU。
 - Static Assets 根路径返回 HTML 200，并带 CSP、X-Frame-Options、nosniff、Referrer 与 Permissions Policy。
 - `/api/v1/not-a-route` 返回 JSON 404 和 `Cache-Control: no-store`。
@@ -85,14 +85,36 @@ env.CRON_DATA (worker-data-local#CronEntrypoint) Worker local [connected]
 - Impeccable mechanical detector 因本机缺少 HTML parser 模块降级为 regex 扫描；fallback 返回空 findings，但未被当作完整通过。独立 finish reviewer 对其 7 项 material fixes 全部判定 resolved，最终 disposition 为 `ship`。
 - Asset producer 确认 `produce` 为空：实时信号与树保持 SVG/CSS/语义 HTML，不引入运行时 raster。
 
-## 尚未执行
+## Staging 结果
 
-缺少 Cloudflare 账户和生产凭据，因此以下项目没有执行，也未标记为通过：
+- 仅创建并操作两个批准的 Worker 与两个专用 D1；使用受限 workers.dev、Free plan、一个真实分钟 Cron 和一个 `CRON_DATA` Service Binding。未接触生产资源。
+- L0、L1、L2、R0、R1、R2、R3、R4、R5、R6 均完成。R7 除 `R7-005` cold-start 显式字段外均完成；R8 rollback 主路径已完成，credential/resource cleanup 等待用户批准。
+- 60 分钟真实 Cron Soak 跨 UTC 整点：59 个正常执行分钟全部 succeeded，计划内暂停分钟由独立真实 Tick 证据补齐；无重复 occurrence、重复业务副作用或 stuck 状态。
+- API external wall p50/p95/p99 为 273/367/735 ms；Tick Worker wall 为 3201/3920/4718 ms；RPC Attempt wall 为 1452/1724/1938 ms。客户端 wall time 未冒充 Cloudflare CPU time。
+- Cloudflare real-time tail 的两个 Cron invocation 为 CPU 12/11 ms、wall 3252/3474 ms、outcome=ok。Dashboard 所选测试 Worker 显示 1,602 Success、0 Errors。
+- Platform D1 最近 1 天 top-100 query shapes 合计 10,606 次、116,812 rows read、7,898 rows written；Target D1 17 shapes、758 次、546 rows read、903 rows written。
+- 回滚演练：当前代码之前的 Worker 版本 `ea146073-…`（代码 `fc8556c…`）与现有 schema 双向兼容；回滚后真实成功路径通过；当前 Platform 代码 `c900b39…` 已恢复并再次通过真实 Cron。
 
-- 真实自定义域名、生产 `Secure` Cookie、可选 Cloudflare Access 外层与生产管理员 Secret。
-- 远程 D1 migration、Time Travel、生产 Target 部署和 Cron 全网传播。
-- Cloudflare 生产 CPU p50/p95/p99、wall time、D1 rows read/written 与日额度测量。
-- 50 个真实业务 Schedule 的生产类错峰负载和账户其他 Worker 竞争。
-- 真实邮件、支付、删除等高副作用 Action；示例只操作测试 D1。
+## Commit / build 对照
 
-上线前必须按 `docs/deployment.md` 使用非生产 Cloudflare 资源完成 L5 验证，并把结果追加到本报告，不能用本地 elapsed time 替代。
+| 范围                  | Git commit                                 | Cloudflare Worker version              |
+| --------------------- | ------------------------------------------ | -------------------------------------- |
+| Platform 当前测试代码 | `c900b39d2dec386a6843010a0ec76c8b1ee2a864` | `ec06cce9-6ee5-4be3-918a-2c35ac38d7fc` |
+| Platform 回滚候选     | `fc8556cbac3855127191630f8d4d27af86948a1a` | `ea146073-29cd-4bed-98aa-b446d98f932b` |
+| Test Target 当前代码  | `df47924e6e2e1bed1c7297b7c20e40f565815661` | `15884179-1d74-41b7-83a2-710a943f71f5` |
+
+完整逐项证据见 [`docs/test-runs/2026-09-10-local.md`](test-runs/2026-09-10-local.md) 与 [`docs/test-runs/2026-09-11-staging.md`](test-runs/2026-09-11-staging.md)。
+
+## 证据索引
+
+- 本地逐项记录：[`docs/test-runs/2026-09-10-local.md`](test-runs/2026-09-10-local.md)。
+- Staging 逐项记录、失败保留、Correlation 与部署版本：[`docs/test-runs/2026-09-11-staging.md`](test-runs/2026-09-11-staging.md)。
+- Soak 监视摘要：[`docs/test-runs/2026-09-11-soak.ndjson`](test-runs/2026-09-11-soak.ndjson)。
+- Cloudflare 日志证据：Platform `api_request`、`tick_dispatch_started`、`tick_dispatch_finished`；Target build 与 receipt 通过逐项报告中的 executionId/attemptId 关联。完整请求头和凭据未保存。
+- D1 证据：仅对 `unified-cron-platform-test-db` 与 `unified-cron-test-target-db` 执行命名的只读聚合；Account ID 与 D1 ID 未写入报告。
+
+## 未关闭项
+
+- `R7-005`：D1 query/row、CPU、wall、outcome 与错误率已有证据；当前 Wrangler OAuth 对 Observability API 返回 403，Dashboard 的首个新版本 invocation 未暴露可选 `coldStart` 字段。保持 `BLOCKED`，不得无证据改为 PASS。
+- `R8-007`..`R8-009`：撤销测试 Registration Token、控制 Secret 以及删除或保留测试资源，需要用户明确批准。
+- 生产环境始终不在本轮测试范围内；没有执行生产 D1、路由、Worker 或真实业务副作用测试。
