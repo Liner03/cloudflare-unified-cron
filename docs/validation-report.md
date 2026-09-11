@@ -88,7 +88,7 @@ env.CRON_DATA (worker-data-local#CronEntrypoint) Worker local [connected]
 ## Staging 结果
 
 - 仅创建并操作两个批准的 Worker 与两个专用 D1；使用受限 workers.dev、Free plan、一个真实分钟 Cron 和一个 `CRON_DATA` Service Binding。未接触生产资源。
-- L0、L1、L2、R0、R1、R2、R3、R4、R5、R6 均完成。R7 除 `R7-005` cold-start 显式字段外均完成；R8 rollback 主路径已完成，credential/resource cleanup 等待用户批准。
+- L0、L1、L2、R0、R1、R2、R3、R4、R5、R6、R8 均完成。R7 有七项 PASS；`R7-005` 仅 cold-start 显式字段由用户批准 SKIPPED，其余观测证据完整。
 - 60 分钟真实 Cron Soak 跨 UTC 整点：59 个正常执行分钟全部 succeeded，计划内暂停分钟由独立真实 Tick 证据补齐；无重复 occurrence、重复业务副作用或 stuck 状态。
 - API external wall p50/p95/p99 为 273/367/735 ms；Tick Worker wall 为 3201/3920/4718 ms；RPC Attempt wall 为 1452/1724/1938 ms。客户端 wall time 未冒充 Cloudflare CPU time。
 - Cloudflare real-time tail 的两个 Cron invocation 为 CPU 12/11 ms、wall 3252/3474 ms、outcome=ok。Dashboard 所选测试 Worker 显示 1,602 Success、0 Errors。
@@ -97,11 +97,11 @@ env.CRON_DATA (worker-data-local#CronEntrypoint) Worker local [connected]
 
 ## Commit / build 对照
 
-| 范围                  | Git commit                                 | Cloudflare Worker version              |
-| --------------------- | ------------------------------------------ | -------------------------------------- |
-| Platform 当前测试代码 | `c900b39d2dec386a6843010a0ec76c8b1ee2a864` | `ec06cce9-6ee5-4be3-918a-2c35ac38d7fc` |
-| Platform 回滚候选     | `fc8556cbac3855127191630f8d4d27af86948a1a` | `ea146073-29cd-4bed-98aa-b446d98f932b` |
-| Test Target 当前代码  | `df47924e6e2e1bed1c7297b7c20e40f565815661` | `15884179-1d74-41b7-83a2-710a943f71f5` |
+| 范围                                    | Git commit                                 | Cloudflare Worker version              |
+| --------------------------------------- | ------------------------------------------ | -------------------------------------- |
+| Platform 最后部署测试代码（资源已删除） | `c900b39d2dec386a6843010a0ec76c8b1ee2a864` | `ec06cce9-6ee5-4be3-918a-2c35ac38d7fc` |
+| Platform 回滚候选                       | `fc8556cbac3855127191630f8d4d27af86948a1a` | `ea146073-29cd-4bed-98aa-b446d98f932b` |
+| Test Target 最后部署代码（资源已删除）  | `df47924e6e2e1bed1c7297b7c20e40f565815661` | `15884179-1d74-41b7-83a2-710a943f71f5` |
 
 完整逐项证据见 [`docs/test-runs/2026-09-10-local.md`](test-runs/2026-09-10-local.md) 与 [`docs/test-runs/2026-09-11-staging.md`](test-runs/2026-09-11-staging.md)。
 
@@ -113,8 +113,10 @@ env.CRON_DATA (worker-data-local#CronEntrypoint) Worker local [connected]
 - Cloudflare 日志证据：Platform `api_request`、`tick_dispatch_started`、`tick_dispatch_finished`；Target build 与 receipt 通过逐项报告中的 executionId/attemptId 关联。完整请求头和凭据未保存。
 - D1 证据：仅对 `unified-cron-platform-test-db` 与 `unified-cron-test-target-db` 执行命名的只读聚合；Account ID 与 D1 ID 未写入报告。
 
-## 未关闭项
+## 最终状态
 
-- `R7-005`：D1 query/row、CPU、wall、outcome 与错误率已有证据；当前 Wrangler OAuth 对 Observability API 返回 403，Dashboard 的首个新版本 invocation 未暴露可选 `coldStart` 字段。保持 `BLOCKED`，不得无证据改为 PASS。
-- `R8-007`..`R8-009`：撤销测试 Registration Token、控制 Secret 以及删除或保留测试资源，需要用户明确批准。
+- `R7-005`：D1 query/row、CPU、wall、outcome 与错误率已有证据；当前 Wrangler OAuth 对 Observability API 返回 403，Dashboard 首个新版本 invocation 未暴露可选 `coldStart` 字段。用户明确批准仅将该子检查标记为 SKIPPED。
+- `R8-007`：全部有效测试 Registration Token 已撤销；Target 的 Registration 与控制 Secret 已删除，旧凭据分别返回 401/503。
+- `R8-008`、`R8-009`：用户批准后永久删除两个测试 Worker 和两个测试 D1；两个原 workers.dev 地址返回 404，两个 D1 精确名称查询均不存在。本地忽略的 Staging Secret/config 文件已删除。
 - 生产环境始终不在本轮测试范围内；没有执行生产 D1、路由、Worker 或真实业务副作用测试。
+- 最终结果：P0=0，P1=0；所有必需项目均 PASS 或具有用户批准的明确 SKIPPED 理由。
