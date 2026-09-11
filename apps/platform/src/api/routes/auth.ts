@@ -32,35 +32,54 @@ export function registerAuthRoutes(app: ApiRouter): void {
   });
 
   app.post("/auth/login", async (context) => {
-    enforceMutationRequest(context.req.raw, context.env);
-    const body = await parseMutationBody(context.req.raw);
-    const input = parseOrThrow(loginSchema, body.value);
-    const loginLimits = new AdminLoginLimitRepository(context.env.DB);
-    const limitKey = await loginLimits.requireAllowed(
-      context.req.header("CF-Connecting-IP") ?? "unknown-source",
-      Date.now(),
-    );
-    const passwordMatches = await verifyConfiguredPassword(
-      input.password,
-      context.env.ADMIN_PASSWORD_HASH,
-    );
-    if (input.username !== context.env.ADMIN_USERNAME || !passwordMatches) {
-      await loginLimits.recordFailure(limitKey, Date.now());
-      throw new ApiError(401, "INVALID_CREDENTIALS", "用户名或密码不正确");
-    }
-    await loginLimits.clear(limitKey);
-    const session = await createAdminSession(context.env, input.username);
-    return context.json(
-      {
-        data: {
-          authenticated: true,
-          username: input.username,
-          expiresAt: new Date(session.expiresAt).toISOString(),
+    let stage = "request_validation";
+    try {
+      enforceMutationRequest(context.req.raw, context.env);
+      const body = await parseMutationBody(context.req.raw);
+      const input = parseOrThrow(loginSchema, body.value);
+      const loginLimits = new AdminLoginLimitRepository(context.env.DB);
+      stage = "rate_limit_lookup";
+      const limitKey = await loginLimits.requireAllowed(
+        context.req.header("CF-Connecting-IP") ?? "unknown-source",
+        Date.now(),
+      );
+      stage = "password_verification";
+      const passwordMatches = await verifyConfiguredPassword(
+        input.password,
+        context.env.ADMIN_PASSWORD_HASH,
+      );
+      if (input.username !== context.env.ADMIN_USERNAME || !passwordMatches) {
+        stage = "record_failure";
+        await loginLimits.recordFailure(limitKey, Date.now());
+        throw new ApiError(401, "INVALID_CREDENTIALS", "用户名或密码不正确");
+      }
+      stage = "clear_rate_limit";
+      await loginLimits.clear(limitKey);
+      stage = "session_creation";
+      const session = await createAdminSession(context.env, input.username);
+      return context.json(
+        {
+          data: {
+            authenticated: true,
+            username: input.username,
+            expiresAt: new Date(session.expiresAt).toISOString(),
+          },
         },
-      },
-      200,
-      { "Set-Cookie": session.cookie },
-    );
+        200,
+        { "Set-Cookie": session.cookie },
+      );
+    } catch (error) {
+      if (!(error instanceof ApiError)) {
+        console.error(
+          JSON.stringify({
+            event: "[DEBUG-login-stage]",
+            stage,
+            errorName: error instanceof Error ? error.name : "unknown",
+          }),
+        );
+      }
+      throw error;
+    }
   });
 
   app.post("/auth/logout", async (context) => {
