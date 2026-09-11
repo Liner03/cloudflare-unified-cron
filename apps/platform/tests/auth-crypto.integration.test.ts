@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   enforceMutationRequest,
+  isSecureSessionEnvironment,
   verifyConfiguredPassword,
 } from "../src/infrastructure/auth/access";
 
@@ -8,6 +9,13 @@ const HASH =
   "pbkdf2-sha256$600000$MDEyMzQ1Njc4OWFiY2RlZg$YVNTOas3Ktj9Bxo0o7TgbDWqVSP6iO1YpNUrQDQGjgA";
 
 describe("local administrator password verification", () => {
+  it("uses secure session cookies for staging and production", () => {
+    expect(isSecureSessionEnvironment("development")).toBe(false);
+    expect(isSecureSessionEnvironment("test")).toBe(false);
+    expect(isSecureSessionEnvironment("staging")).toBe(true);
+    expect(isSecureSessionEnvironment("production")).toBe(true);
+  });
+
   it("accepts the password represented by the configured PBKDF2 hash", async () => {
     await expect(verifyConfiguredPassword("test-password", HASH)).resolves.toBe(
       true,

@@ -1,10 +1,13 @@
 import type { MiddlewareHandler } from "hono";
+import { pbkdf2 } from "node:crypto";
+import { promisify } from "node:util";
 import { ApiError } from "../../api/errors";
 import { ADMIN_SESSION_TTL_MS } from "../../domain/auth";
 import { AdminSessionRepository } from "../d1/admin-session-repository";
 import { timingSafeEqual } from "../security/crypto";
 
 const MIN_PBKDF2_ITERATIONS = 600_000;
+const derivePbkdf2 = promisify(pbkdf2);
 
 export interface ApiVariables {
   actor: string;
@@ -59,22 +62,16 @@ export async function verifyConfiguredPassword(
   ) {
     throw invalidAuthConfiguration();
   }
-  const passwordKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(suppliedPassword),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
+  const derived = await derivePbkdf2(
+    suppliedPassword,
+    salt,
+    iterations,
+    expected.byteLength,
+    "sha256",
   );
-  const saltBuffer = new Uint8Array(salt).buffer;
-  const derived = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      { name: "PBKDF2", hash: "SHA-256", salt: saltBuffer, iterations },
-      passwordKey,
-      256,
-    ),
-  );
-  return timingSafeEqual(derived.buffer, new Uint8Array(expected).buffer);
+  const derivedBytes = new Uint8Array(derived.byteLength);
+  derivedBytes.set(derived);
+  return timingSafeEqual(derivedBytes.buffer, new Uint8Array(expected).buffer);
 }
 
 export async function createAdminSession(
@@ -169,9 +166,13 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 function cookieName(env: Env): string {
-  return String(env.APP_ENV) === "production"
+  return isSecureSessionEnvironment(String(env.APP_ENV))
     ? "__Host-ucp_session"
     : "ucp_session";
+}
+
+export function isSecureSessionEnvironment(value: string): boolean {
+  return value === "staging" || value === "production";
 }
 
 function serializeSessionCookie(
@@ -179,7 +180,9 @@ function serializeSessionCookie(
   value: string,
   maxAgeSeconds: number,
 ): string {
-  const secure = String(env.APP_ENV) === "production" ? "; Secure" : "";
+  const secure = isSecureSessionEnvironment(String(env.APP_ENV))
+    ? "; Secure"
+    : "";
   return `${cookieName(env)}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure}`;
 }
 
