@@ -87,6 +87,84 @@ describe("registered control plane API", () => {
     expect(JSON.stringify(await listed.json())).not.toContain(token);
   });
 
+  it("idempotently issues one token without persisting its raw value", async () => {
+    const key = `token-issue:${crypto.randomUUID()}`;
+    const body = {
+      targetId: "DATA",
+      label: "idempotent issue",
+      expiresInDays: 30,
+    };
+    const first = await adminMutateWithKey(
+      "/api/v1/registration-tokens",
+      body,
+      key,
+    );
+    const firstBody = await first.json();
+    const replay = await adminMutateWithKey(
+      "/api/v1/registration-tokens",
+      body,
+      key,
+    );
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(firstBody);
+    expect(await count("registration_tokens")).toBe(1);
+
+    const conflict = await adminMutateWithKey(
+      "/api/v1/registration-tokens",
+      { ...body, label: "changed" },
+      key,
+    );
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    const stored = await env.DB.prepare(
+      "SELECT response_json FROM api_idempotency WHERE key = ?",
+    )
+      .bind(key)
+      .first<{ response_json: string }>();
+    expect(stored?.response_json).not.toContain("ucrt_");
+  });
+
+  it("idempotently rotates one token without persisting its raw value", async () => {
+    const issued = await issueToken();
+    const issuedBody = await issued.json();
+    const originalId = readString(issuedBody, "id");
+    const key = `token-rotate:${crypto.randomUUID()}`;
+    const first = await adminMutateWithKey(
+      `/api/v1/registration-tokens/${originalId}/rotate`,
+      { expiresInDays: 30 },
+      key,
+    );
+    const firstBody = await first.json();
+    const replay = await adminMutateWithKey(
+      `/api/v1/registration-tokens/${originalId}/rotate`,
+      { expiresInDays: 30 },
+      key,
+    );
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(firstBody);
+    expect(await count("registration_tokens")).toBe(2);
+
+    const conflict = await adminMutateWithKey(
+      `/api/v1/registration-tokens/${originalId}/rotate`,
+      { expiresInDays: 31 },
+      key,
+    );
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      error: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    const stored = await env.DB.prepare(
+      "SELECT response_json FROM api_idempotency WHERE key = ?",
+    )
+      .bind(key)
+      .first<{ response_json: string }>();
+    expect(stored?.response_json).not.toContain("ucrt_");
+  });
+
   it("atomically publishes actions and schedules, with revision idempotency", async () => {
     const token = await issuedToken();
     const first = await register(token, baseRegistration);

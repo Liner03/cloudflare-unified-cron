@@ -1,7 +1,25 @@
 import { z } from "zod";
 import { DomainError } from "../../domain/error";
 import { getTargetManifest } from "../../targets.manifest";
-import { randomBase64Url, sha256Hex } from "../security/crypto";
+import { sha256Hex } from "../security/crypto";
+
+const TOKEN_IDEMPOTENCY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const storedIdempotencySchema = z.object({
+  request_hash: z.string(),
+  response_json: z.string(),
+});
+
+const issuedTokenReplaySchema = z.object({
+  id: z.string(),
+  targetId: z.string(),
+  label: z.string(),
+  expiresAt: z.string(),
+});
+
+const rotatedTokenReplaySchema = issuedTokenReplaySchema.extend({
+  rotatedFromId: z.string(),
+});
 
 const tokenListRowSchema = z.object({
   id: z.string(),
@@ -44,6 +62,22 @@ export interface RegistrationTokenView {
   replacedById: string | null;
 }
 
+interface SensitiveIdempotencyInput {
+  scope: string;
+  key: string;
+  rawBody: Uint8Array;
+  derivationSecret: string;
+}
+
+interface PreparedSensitiveIdempotency {
+  scope: string;
+  key: string;
+  requestHash: string;
+  now: number;
+}
+
+type StoredIdempotency = z.infer<typeof storedIdempotencySchema>;
+
 /** Owns the full lifecycle of one-target, write-only machine credentials. */
 export class RegistrationTokenRepository {
   constructor(private readonly db: D1Database) {}
@@ -85,6 +119,7 @@ export class RegistrationTokenRepository {
     expiresInDays: number;
     actor: string;
     now: number;
+    idempotency: SensitiveIdempotencyInput;
   }): Promise<{
     id: string;
     targetId: string;
@@ -110,50 +145,87 @@ export class RegistrationTokenRepository {
         "Target manifest 尚未同步到 D1",
       );
     }
-    const rawToken = `ucrt_${randomBase64Url(32)}`;
+    const idempotency = await this.prepareSensitiveIdempotency(
+      input.idempotency,
+      input.now,
+    );
+    const rawToken = await deriveRegistrationToken(
+      input.idempotency.derivationSecret,
+      idempotency.prepared,
+    );
+    if (idempotency.stored) {
+      return {
+        ...replaySensitive(
+          idempotency.stored,
+          idempotency.prepared.requestHash,
+          issuedTokenReplaySchema,
+        ),
+        token: rawToken,
+      };
+    }
     const id = crypto.randomUUID();
     const expiresAt = input.now + input.expiresInDays * 24 * 60 * 60 * 1000;
-    await this.db.batch([
-      this.db
-        .prepare(
-          `INSERT INTO registration_tokens (
-             id, target_id, label, token_hash, expires_at, created_by, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          id,
-          input.targetId,
-          input.label,
-          await sha256Hex(rawToken),
-          expiresAt,
-          input.actor,
-          input.now,
-        ),
-      this.db
-        .prepare(
-          `INSERT INTO audit_events (
-             id, actor, action, entity_type, entity_id, changes_json, created_at
-           ) VALUES (?, ?, 'registration_token.created', 'registration_token', ?, ?, ?)`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          input.actor,
-          id,
-          JSON.stringify({
-            targetId: input.targetId,
-            label: input.label,
-            expiresAt,
-          }),
-          input.now,
-        ),
-    ]);
-    return {
+    const safeResult = {
       id,
       targetId: input.targetId,
       label: input.label,
-      token: rawToken,
       expiresAt: new Date(expiresAt).toISOString(),
     };
+    try {
+      await this.db.batch([
+        this.sensitiveIdempotencyStatement(idempotency.prepared, safeResult),
+        this.db
+          .prepare(
+            `INSERT INTO registration_tokens (
+               id, target_id, label, token_hash, expires_at, created_by, created_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            id,
+            input.targetId,
+            input.label,
+            await sha256Hex(rawToken),
+            expiresAt,
+            input.actor,
+            input.now,
+          ),
+        this.db
+          .prepare(
+            `INSERT INTO audit_events (
+               id, actor, action, entity_type, entity_id, changes_json, created_at
+             ) VALUES (?, ?, 'registration_token.created', 'registration_token', ?, ?, ?)`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            input.actor,
+            id,
+            JSON.stringify({
+              targetId: input.targetId,
+              label: input.label,
+              expiresAt,
+            }),
+            input.now,
+          ),
+      ]);
+    } catch (error) {
+      const raced = await this.readSensitiveIdempotency(
+        idempotency.prepared.scope,
+        idempotency.prepared.key,
+        input.now,
+      );
+      if (raced) {
+        return {
+          ...replaySensitive(
+            raced,
+            idempotency.prepared.requestHash,
+            issuedTokenReplaySchema,
+          ),
+          token: rawToken,
+        };
+      }
+      throw error;
+    }
+    return { ...safeResult, token: rawToken };
   }
 
   async revoke(input: {
@@ -227,6 +299,7 @@ export class RegistrationTokenRepository {
     expiresInDays: number;
     actor: string;
     now: number;
+    idempotency: SensitiveIdempotencyInput;
   }): Promise<{
     id: string;
     targetId: string;
@@ -235,6 +308,24 @@ export class RegistrationTokenRepository {
     expiresAt: string;
     rotatedFromId: string;
   }> {
+    const idempotency = await this.prepareSensitiveIdempotency(
+      input.idempotency,
+      input.now,
+    );
+    const rawToken = await deriveRegistrationToken(
+      input.idempotency.derivationSecret,
+      idempotency.prepared,
+    );
+    if (idempotency.stored) {
+      return {
+        ...replaySensitive(
+          idempotency.stored,
+          idempotency.prepared.requestHash,
+          rotatedTokenReplaySchema,
+        ),
+        token: rawToken,
+      };
+    }
     const current = await this.db
       .prepare(
         `SELECT id, target_id, label, expires_at, revoked_at, replaced_by_id
@@ -265,10 +356,17 @@ export class RegistrationTokenRepository {
     }
 
     const id = crypto.randomUUID();
-    const rawToken = `ucrt_${randomBase64Url(32)}`;
     const expiresAt = input.now + input.expiresInDays * 24 * 60 * 60 * 1000;
+    const safeResult = {
+      id,
+      targetId: current.target_id,
+      label: current.label,
+      expiresAt: new Date(expiresAt).toISOString(),
+      rotatedFromId: current.id,
+    };
     try {
       await this.db.batch([
+        this.sensitiveIdempotencyStatement(idempotency.prepared, safeResult),
         this.db
           .prepare(
             `INSERT INTO registration_tokens (
@@ -318,6 +416,21 @@ export class RegistrationTokenRepository {
           ),
       ]);
     } catch (error) {
+      const raced = await this.readSensitiveIdempotency(
+        idempotency.prepared.scope,
+        idempotency.prepared.key,
+        input.now,
+      );
+      if (raced) {
+        return {
+          ...replaySensitive(
+            raced,
+            idempotency.prepared.requestHash,
+            rotatedTokenReplaySchema,
+          ),
+          token: rawToken,
+        };
+      }
       if (
         error instanceof Error &&
         /malformed JSON|constraint failed|UNIQUE constraint/i.test(
@@ -328,14 +441,69 @@ export class RegistrationTokenRepository {
       }
       throw error;
     }
-    return {
-      id,
-      targetId: current.target_id,
-      label: current.label,
-      token: rawToken,
-      expiresAt: new Date(expiresAt).toISOString(),
-      rotatedFromId: current.id,
+    return { ...safeResult, token: rawToken };
+  }
+
+  private async prepareSensitiveIdempotency(
+    input: SensitiveIdempotencyInput,
+    now: number,
+  ): Promise<{
+    prepared: PreparedSensitiveIdempotency;
+    stored: StoredIdempotency | null;
+  }> {
+    const prepared = {
+      scope: input.scope,
+      key: input.key,
+      requestHash: await sha256Bytes(input.rawBody),
+      now,
     };
+    return {
+      prepared,
+      stored: await this.readSensitiveIdempotency(
+        prepared.scope,
+        prepared.key,
+        now,
+      ),
+    };
+  }
+
+  private readSensitiveIdempotency(
+    scope: string,
+    key: string,
+    now: number,
+  ): Promise<StoredIdempotency | null> {
+    return this.db
+      .prepare(
+        `SELECT request_hash, response_json
+         FROM api_idempotency
+         WHERE scope = ? AND key = ? AND expires_at > ?`,
+      )
+      .bind(scope, key, now)
+      .first()
+      .then((value) =>
+        value === null ? null : storedIdempotencySchema.parse(value),
+      );
+  }
+
+  private sensitiveIdempotencyStatement(
+    input: PreparedSensitiveIdempotency,
+    safeResponse: unknown,
+  ): D1PreparedStatement {
+    return this.db
+      .prepare(
+        `INSERT INTO api_idempotency (
+           scope, key, request_hash, status_code, response_json,
+           created_at, expires_at
+         ) VALUES (?, ?, ?, 200, ?, ?, ?)`,
+      )
+      .bind(
+        input.scope,
+        input.key,
+        input.requestHash,
+        JSON.stringify(safeResponse),
+        input.now,
+        input.now + TOKEN_IDEMPOTENCY_TTL_MS,
+      );
   }
 }
 
@@ -378,4 +546,56 @@ function tokenNotActive(): DomainError {
     "REGISTRATION_TOKEN_NOT_ACTIVE",
     "Registration Token 已撤销、已过期或已被轮换",
   );
+}
+
+function replaySensitive<Schema extends z.ZodType>(
+  stored: StoredIdempotency,
+  requestHash: string,
+  schema: Schema,
+): z.output<Schema> {
+  if (stored.request_hash !== requestHash) {
+    throw new DomainError(
+      "conflict",
+      "IDEMPOTENCY_CONFLICT",
+      "相同 Idempotency-Key 已用于不同请求体",
+    );
+  }
+  return schema.parse(JSON.parse(stored.response_json));
+}
+
+async function deriveRegistrationToken(
+  secret: string,
+  input: PreparedSensitiveIdempotency,
+): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(
+      `${input.scope}\u0000${input.key}\u0000${input.requestHash}`,
+    ),
+  );
+  let binary = "";
+  for (const byte of new Uint8Array(signature)) {
+    binary += String.fromCharCode(byte);
+  }
+  return `ucrt_${btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "")}`;
+}
+
+async function sha256Bytes(value: Uint8Array): Promise<string> {
+  const bytes = new Uint8Array(value.byteLength);
+  bytes.set(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes.buffer);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }

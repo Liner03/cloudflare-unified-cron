@@ -2,6 +2,7 @@ import { z } from "zod";
 import { RegistrationTokenRepository } from "../../infrastructure/d1/registration-token-repository";
 import { parseOrThrow } from "../http-support";
 import { parseMutationBody } from "../request-body";
+import { requireIdempotencyKey } from "../idempotent-mutation";
 import type { ApiRouter } from "../router";
 
 const createTokenSchema = z
@@ -27,10 +28,17 @@ export function registerRegistrationTokenRoutes(app: ApiRouter): void {
   app.post("/registration-tokens", async (context) => {
     const body = await parseMutationBody(context.req.raw);
     const input = parseOrThrow(createTokenSchema, body.value);
+    const actor = context.get("actor");
     const token = await new RegistrationTokenRepository(context.env.DB).issue({
       ...input,
-      actor: context.get("actor"),
+      actor,
       now: Date.now(),
+      idempotency: tokenIdempotency(
+        context.req.raw,
+        actor,
+        body.raw,
+        context.env,
+      ),
     });
     return context.json({ data: token });
   });
@@ -51,14 +59,35 @@ export function registerRegistrationTokenRoutes(app: ApiRouter): void {
   app.post("/registration-tokens/:id/rotate", async (context) => {
     const body = await parseMutationBody(context.req.raw);
     const input = parseOrThrow(rotateTokenSchema, body.value);
+    const actor = context.get("actor");
     const result = await new RegistrationTokenRepository(context.env.DB).rotate(
       {
         id: context.req.param("id"),
         expiresInDays: input.expiresInDays,
-        actor: context.get("actor"),
+        actor,
         now: Date.now(),
+        idempotency: tokenIdempotency(
+          context.req.raw,
+          actor,
+          body.raw,
+          context.env,
+        ),
       },
     );
     return context.json({ data: result });
   });
+}
+
+function tokenIdempotency(
+  request: Request,
+  actor: string,
+  rawBody: Uint8Array,
+  env: Env,
+) {
+  return {
+    scope: `${actor}:${request.method}:${new URL(request.url).pathname}`,
+    key: requireIdempotencyKey(request),
+    rawBody,
+    derivationSecret: env.ADMIN_PASSWORD_HASH,
+  };
 }
