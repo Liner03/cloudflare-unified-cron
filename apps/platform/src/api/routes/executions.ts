@@ -59,50 +59,50 @@ export function registerExecutionRoutes(app: ApiRouter): void {
 
   app.post("/executions/:id/retry", async (context) => {
     const body = await parseMutationBody(context.req.raw);
-    const input = parseOrThrow(riskConfirmationSchema, body.value);
-    return executeIdempotentMutation(context, body.raw, () =>
-      new ExecutionOperationsRepository(context.env.DB).planRetry({
+    return executeIdempotentMutation(context, body.raw, () => {
+      const input = parseOrThrow(riskConfirmationSchema, body.value);
+      return new ExecutionOperationsRepository(context.env.DB).planRetry({
         id: context.req.param("id"),
         confirmRisk: input.confirmRisk,
         now: Date.now(),
-      }),
-    );
+      });
+    });
   });
 
   app.post("/executions/:id/rerun", async (context) => {
     const body = await parseMutationBody(context.req.raw);
-    const input = parseOrThrow(riskConfirmationSchema, body.value);
-    return executeIdempotentMutation(context, body.raw, () =>
-      new ExecutionOperationsRepository(context.env.DB).planRerun({
+    return executeIdempotentMutation(context, body.raw, () => {
+      const input = parseOrThrow(riskConfirmationSchema, body.value);
+      return new ExecutionOperationsRepository(context.env.DB).planRerun({
         id: context.req.param("id"),
         confirmRisk: input.confirmRisk,
         now: Date.now(),
-      }),
-    );
+      });
+    });
   });
 
   app.post("/executions/:id/cancel", async (context) => {
     const body = await parseMutationBody(context.req.raw);
-    parseOrThrow(z.object({}).strict(), body.value);
-    return executeIdempotentMutation(context, body.raw, () =>
-      new ExecutionOperationsRepository(context.env.DB).planCancel(
+    return executeIdempotentMutation(context, body.raw, () => {
+      parseOrThrow(z.object({}).strict(), body.value);
+      return new ExecutionOperationsRepository(context.env.DB).planCancel(
         context.req.param("id"),
         Date.now(),
-      ),
-    );
+      );
+    });
   });
 
   app.post("/executions/:id/resolve", async (context) => {
     const body = await parseMutationBody(context.req.raw);
-    const input = parseOrThrow(resolveExecutionSchema, body.value);
-    return executeIdempotentMutation(context, body.raw, () =>
-      new ExecutionOperationsRepository(context.env.DB).planResolve({
+    return executeIdempotentMutation(context, body.raw, () => {
+      const input = parseOrThrow(resolveExecutionSchema, body.value);
+      return new ExecutionOperationsRepository(context.env.DB).planResolve({
         id: context.req.param("id"),
         resolution: input.resolution,
         note: input.note,
         now: Date.now(),
-      }),
-    );
+      });
+    });
   });
 
   app.get("/audit-events", async (context) => {

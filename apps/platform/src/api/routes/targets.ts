@@ -27,8 +27,8 @@ export function registerTargetRoutes(app: ApiRouter): void {
 
   app.post("/targets/:id/check", async (context) => {
     const body = await parseMutationBody(context.req.raw);
-    parseOrThrow(z.object({}), body.value);
     return executeIdempotentMutation(context, body.raw, async () => {
+      parseOrThrow(z.object({}).strict(), body.value);
       const decision = await new TargetCheckApplication(
         new RegisteredTargetCatalog(context.env.DB),
         new ServiceBindingAdapter(context.env),
@@ -43,8 +43,8 @@ export function registerTargetRoutes(app: ApiRouter): void {
   for (const operation of ["enable", "disable"] as const) {
     app.post(`/targets/:id/${operation}`, async (context) => {
       const body = await parseMutationBody(context.req.raw);
-      parseOrThrow(z.object({}), body.value);
       return executeIdempotentMutation(context, body.raw, () => {
+        parseOrThrow(z.object({}).strict(), body.value);
         return new TargetRepository(context.env.DB).planEnabledState(
           context.req.param("id"),
           operation,

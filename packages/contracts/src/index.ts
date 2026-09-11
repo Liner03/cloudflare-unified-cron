@@ -72,6 +72,7 @@ export const retryPolicySchema = z
     delaysSeconds: z.array(z.number().int().min(60).max(86_400)).max(4),
     retryOnUnknown: z.boolean().default(false),
   })
+  .strict()
   .superRefine((value, ctx) => {
     if (value.delaysSeconds.length !== value.maxAttempts - 1) {
       ctx.addIssue({

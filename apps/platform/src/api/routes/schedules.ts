@@ -38,9 +38,9 @@ export function registerScheduleRoutes(app: ApiRouter): void {
   for (const operation of ["pause", "resume"] as const) {
     app.post(`/schedules/:id/${operation}`, async (context) => {
       const body = await parseMutationBody(context.req.raw);
-      parseOrThrow(z.object({}).strict(), body.value);
-      const revision = requireRevision(context.req.header("If-Match"));
       return executeIdempotentMutation(context, body.raw, () => {
+        parseOrThrow(z.object({}).strict(), body.value);
+        const revision = requireRevision(context.req.header("If-Match"));
         const schedules = new ManagedScheduleRepository(context.env.DB);
         return operation === "pause"
           ? schedules.planPause(context.req.param("id"), revision, Date.now())

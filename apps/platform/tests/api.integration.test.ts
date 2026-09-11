@@ -636,6 +636,20 @@ describe("registered control plane API", () => {
     });
   });
 
+  it("rejects unknown fields on empty-body mutations without changing state", async () => {
+    const response = await adminMutate("/api/v1/targets/DATA/disable", {
+      unexpected: true,
+    });
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "VALIDATION_FAILED" },
+    });
+    const target = await adminGet("/api/v1/targets/DATA");
+    await expect(target.json()).resolves.toMatchObject({
+      data: { state: { enabled: 1 } },
+    });
+  });
+
   it("reports execution and first-attempt success rates with an explicit sample", async () => {
     const token = await issuedToken();
     await register(token, baseRegistration);
