@@ -38,8 +38,9 @@ pnpm dev
 
 `seed:demo:local` 只写入本地 D1 中带 `local-demo-` revision 或 `demo-` ID 的确定性演示记录，不属于 migration 或生产部署流程。它保留真实白名单 Target `DATA`，并额外提供三个只读演示网站；演示网站不会进入生产 Target 白名单、Registration Token 选项或 RPC 派发。数据覆盖成功、失败、结果未知、自动重试等待、网站离线、管理员暂停、声明停用、配置失效和无运行历史等界面状态。
 
-登录用户名默认为 `admin`，密码只以 PBKDF2-SHA256 哈希保存在本地
-`.dev.vars` 或生产 Worker Secret 中。仓库不包含可用的默认管理员密码。
+登录用户名默认为 `admin`。本地普通密码使用 PBKDF2-SHA256；Cloudflare
+部署应使用至少 32 字符的随机高熵密码和 `--high-entropy` 哈希模式。
+哈希只保存在 `.dev.vars` 或 Worker Secret 中，仓库不包含可用的默认密码。
 
 本地地址：
 

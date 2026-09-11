@@ -33,13 +33,15 @@ pnpm verify
 pnpm db:migrate:remote
 pnpm targets:sync:remote
 pnpm --filter @unified-cron/example-worker-data exec wrangler deploy --config wrangler.jsonc
-pnpm --filter @unified-cron/platform auth:hash-password
+pnpm --filter @unified-cron/platform exec node scripts/hash-admin-password.mjs --high-entropy
 pnpm --filter @unified-cron/platform exec wrangler secret put ADMIN_PASSWORD_HASH --config wrangler.jsonc
 pnpm --filter @unified-cron/web build
 pnpm --filter @unified-cron/platform exec wrangler deploy --config wrangler.jsonc
 ```
 
 根 `pnpm db:migrate:remote` 会依次调用示例业务 Worker 与平台 Worker 的远程迁移脚本；两个 `wrangler.jsonc` 的 D1 占位值都必须先替换。
+
+Cloudflare Workers 将单次 PBKDF2 限制为 100,000 iterations，低于本项目普通密码格式要求的 600,000。生产部署必须为管理员生成至少 32 字符的随机高熵密码，并使用 `--high-entropy` 输出 `sha256-v1` 格式；不要对人类可记忆的低熵密码使用该模式。
 
 生产平台配置只包含一个 `* * * * *` Trigger，并关闭 `workers_dev` 与 preview URLs。Static Assets 对 `/api` 使用 Worker-first；未知 API 路径必须返回 JSON 404，不能被 SPA fallback 吞掉。
 

@@ -28,6 +28,19 @@ describe("local administrator password verification", () => {
     ).resolves.toBe(false);
   });
 
+  it("accepts a high-entropy password represented by SHA-256", async () => {
+    const password = "0123456789abcdef0123456789abcdef";
+    const digest = Buffer.from(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password)),
+    ).toString("base64url");
+    await expect(
+      verifyConfiguredPassword(password, `sha256-v1$${digest}`),
+    ).resolves.toBe(true);
+    await expect(
+      verifyConfiguredPassword("different-password", `sha256-v1$${digest}`),
+    ).resolves.toBe(false);
+  });
+
   it("rejects weak or malformed configuration", async () => {
     await expect(
       verifyConfiguredPassword("test-password", "pbkdf2-sha256$1$bad$bad"),

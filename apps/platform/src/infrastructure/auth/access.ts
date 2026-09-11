@@ -46,6 +46,17 @@ export async function verifyConfiguredPassword(
   encodedHash: string,
 ): Promise<boolean> {
   const parts = encodedHash.split("$");
+  if (parts.length === 2 && parts[0] === "sha256-v1") {
+    const expected = decodeBase64Url(parts[1] ?? "");
+    if (expected.byteLength !== 32) throw invalidAuthConfiguration();
+    const derived = Buffer.from(
+      await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(suppliedPassword),
+      ),
+    );
+    return nodeTimingSafeEqual(derived, Buffer.from(expected));
+  }
   if (parts.length !== 4 || parts[0] !== "pbkdf2-sha256") {
     throw invalidAuthConfiguration();
   }
