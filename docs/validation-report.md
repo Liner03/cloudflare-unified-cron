@@ -6,7 +6,7 @@
 
 已验证通过：三个网站 Worker 的独立 Queue consumer、真实 Registration 与 Token 轮换、Service Binding `describe()` 兼容检查、管理员登录/Session/Origin、Static Assets、`/llms.txt`、JSON API 404、请求边界、Cookie 安全属性以及 D1/公开内容无原始凭据。10 条分钟规则已按 4/3/3 分布到三个真实 Worker，平台已安全暂停且无在途 Delivery/Execution。
 
-关键失败：Cloudflare API 确认 `unified-cron-platform-test` 上确实保存了一条 `* * * * *` Trigger（创建于 `2026-09-12T10:07:20Z`，重应用于 `13:16:06Z`），但截至 `13:59:23Z`，Platform D1 的 `last_tick_*` 和 `build_version` 仍全部为空，Delivery 为 0。等待已超过 Cloudflare 文档所述最长 15 分钟传播窗口。随后通过已登录正确账号的 Chrome 检查：Dashboard 显示一个 Trigger、下一次运行 13:58 UTC；Cron Events 显示过去一周没有事件；Observability 显示 80 次成功 HTTP/API 事件、0 错误，未出现 scheduled 事件。Workers Logs 已启用而 Traces 未启用，全程未修改控制台设置。
+关键失败：Cloudflare API 确认 `unified-cron-platform-test` 上确实保存了一条 `* * * * *` Trigger（创建于 `2026-09-12T10:07:20Z`，重应用于 `13:16:06Z`），但截至 `14:10:05Z`，Platform D1 的 `last_tick_*` 和 `build_version` 仍全部为空，Delivery 为 0。等待已超过 Cloudflare 文档所述最长 15 分钟传播窗口。随后通过已登录正确账号的 Chrome 检查：Dashboard 显示一个 Every minute Trigger，并预测 13:58、14:08 UTC 运行；两个时间过去后的 System 心跳仍为空。Cron Events 刷新后仍显示过去一周没有事件；Observability 显示 80 次成功 HTTP/API 事件、0 错误，未出现 scheduled 事件。Workers Logs 已启用而 Traces 未启用，全程未修改控制台设置。
 
 因此当前不能声明“完全代替 Cloudflare Trigger”或 Free 下 10/25/50/100 已通过。`R3-002` 为 FAIL，`R3-003..009` 与 `R7-009..012` 受其阻塞；25/50/100 档未继续制造流量。资源目前保留且全局派发暂停，若底层 Trigger 延迟恢复，不会继续入队测试任务。逐项证据见 [2026-09-12 Staging 记录](test-runs/2026-09-12-staging.md)。
 
