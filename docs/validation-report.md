@@ -10,6 +10,8 @@
 
 因此当前不能声明“完全代替 Cloudflare Trigger”或 Free 下 10/25/50/100 已通过。`R3-002` 为 FAIL，`R3-003..009` 与 `R7-009..012` 受其阻塞；25/50/100 档未继续制造流量。资源目前保留且全局派发暂停，若底层 Trigger 延迟恢复，不会继续入队测试任务。逐项证据见 [2026-09-12 Staging 记录](test-runs/2026-09-12-staging.md)。
 
+用户批准后又执行了精确 Trigger 重建：先清空并确认远端 Schedule 数量为 0，再于 `14:13:37Z` 创建唯一的新 `* * * * *`。从 `14:17:11Z` 到 `14:29:13Z` 共 14 次只读检查均无暂停 Tick。由于 `beginTick()` 发生在暂停判断之前，平台暂停不会隐藏心跳；该结果进一步排除了旧 Trigger 对象损坏与传播未完成，故障边界仍在 Cloudflare 自动 scheduled 事件投递链路。
+
 ## 最新：2026-09-12 触发架构修复（本地）
 
 实现提交：`abee082a8990afdea90f4f7878e8fb5fefbef48f`。`pnpm verify` 在固定提交上退出码 0：Contracts 18、SDK 11、Platform unit 34、Platform integration 66、网站 Worker integration 11、E2E 39，合计 179 项。
