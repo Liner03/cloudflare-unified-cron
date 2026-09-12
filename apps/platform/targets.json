@@ -7,5 +7,47 @@
     "entrypoint": "CronEntrypoint",
     "protocolVersion": 1,
     "manifestRevision": "data-v1"
+  },
+  {
+    "id": "DATA_A",
+    "label": "Data Worker A",
+    "binding": "CRON_DATA_A",
+    "service": "worker-data-a",
+    "entrypoint": "CronEntrypoint",
+    "protocolVersion": 1,
+    "manifestRevision": "data-a-queue-v1",
+    "delivery": {
+      "mode": "queue",
+      "binding": "QUEUE_DATA_A",
+      "queue": "worker-data-a-triggers"
+    }
+  },
+  {
+    "id": "DATA_B",
+    "label": "Data Worker B",
+    "binding": "CRON_DATA_B",
+    "service": "worker-data-b",
+    "entrypoint": "CronEntrypoint",
+    "protocolVersion": 1,
+    "manifestRevision": "data-b-queue-v1",
+    "delivery": {
+      "mode": "queue",
+      "binding": "QUEUE_DATA_B",
+      "queue": "worker-data-b-triggers"
+    }
+  },
+  {
+    "id": "DATA_C",
+    "label": "Data Worker C",
+    "binding": "CRON_DATA_C",
+    "service": "worker-data-c",
+    "entrypoint": "CronEntrypoint",
+    "protocolVersion": 1,
+    "manifestRevision": "data-c-queue-v1",
+    "delivery": {
+      "mode": "queue",
+      "binding": "QUEUE_DATA_C",
+      "queue": "worker-data-c-triggers"
+    }
   }
 ]

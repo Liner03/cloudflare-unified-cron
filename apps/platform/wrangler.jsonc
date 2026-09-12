@@ -30,12 +30,27 @@
     },
   ],
   "secrets": {
-    "required": ["ADMIN_PASSWORD_HASH"],
+    "required": ["ADMIN_PASSWORD_HASH", "TRIGGER_SIGNING_KEY"],
   },
   "services": [
     {
       "binding": "CRON_DATA",
       "service": "worker-data",
+      "entrypoint": "CronEntrypoint",
+    },
+    {
+      "binding": "CRON_DATA_A",
+      "service": "worker-data-a",
+      "entrypoint": "CronEntrypoint",
+    },
+    {
+      "binding": "CRON_DATA_B",
+      "service": "worker-data-b",
+      "entrypoint": "CronEntrypoint",
+    },
+    {
+      "binding": "CRON_DATA_C",
+      "service": "worker-data-c",
       "entrypoint": "CronEntrypoint",
     },
   ],
@@ -51,6 +66,19 @@
     "head_sampling_rate": 1,
   },
   "queues": {
-    "producers": [],
+    "producers": [
+      {
+        "binding": "QUEUE_DATA_A",
+        "queue": "worker-data-a-triggers",
+      },
+      {
+        "binding": "QUEUE_DATA_B",
+        "queue": "worker-data-b-triggers",
+      },
+      {
+        "binding": "QUEUE_DATA_C",
+        "queue": "worker-data-c-triggers",
+      },
+    ],
   },
 }

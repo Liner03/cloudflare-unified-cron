@@ -50,11 +50,8 @@ export async function executeQueueProbe(
 
 export function consumeTriggers(batch: MessageBatch<unknown>, env: Env) {
   return createTriggerConsumer<Env>({
-    targetId: "DATA",
-    queueName:
-      env.APP_ENV === "production"
-        ? "worker-data-triggers"
-        : "worker-data-triggers-local",
+    targetId: env.TARGET_ID,
+    queueName: env.TRIGGER_QUEUE_NAME,
     execute: executeQueueProbe,
     report: (job, result, runtime) =>
       reportTriggerResult(

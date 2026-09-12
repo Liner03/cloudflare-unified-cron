@@ -12,8 +12,13 @@
       "migrations_dir": "migrations",
     },
   ],
+  "secrets": {
+    "required": ["REGISTRATION_TOKEN", "TEST_CONTROL_SECRET"],
+  },
   "vars": {
     "APP_ENV": "test",
+    "TARGET_ID": "DATA",
+    "TRIGGER_QUEUE_NAME": "worker-data-triggers-local",
     "BUILD_ID": "local",
     "PLATFORM_REGISTRATION_URL": "http://127.0.0.1:8787/api/v1/registration",
   },

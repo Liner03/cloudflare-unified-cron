@@ -21,7 +21,7 @@ export function publishQueueRegistration(env: Env) {
   }).register({
     protocolVersion: 1,
     registrationRevision: `queue-${env.BUILD_ID}`,
-    worker: { label: "Data Worker" },
+    worker: { label: `Data Worker ${env.TARGET_ID}` },
     actions: [
       {
         name: "queueProbe",

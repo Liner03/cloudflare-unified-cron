@@ -64,13 +64,14 @@ Agent-operated browser / remote driver
         │      ├── one real * * * * * Cron Trigger
         │      └── Service Binding ──────────────┐
         │                                        │
-        └── unified-cron-test-target.<approved-domain>
+        └── at least three unified-cron-test-target-* Workers
                ├── CronEntrypoint ◄─────────────┘
-               ├── dedicated Test Target D1
+               ├── one isolated Queue + DLQ per Worker
+               ├── dedicated shared Test Target D1
                └── protected scenario-control UI/API
 ```
 
-两个 Worker 必须位于同一个专用测试 Account 或同一 Account 的隔离测试资源中。Staging 不复用生产数据库、域名、Secret 或业务绑定。
+Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或同一 Account 的隔离测试资源中。Staging 不复用生产数据库、域名、Secret 或业务绑定。
 
 ## 4. Test Target Worker 要求
 
@@ -174,7 +175,7 @@ Agent-operated browser / remote driver
 
 - [ ] `R0-001` 用户确认测试 Cloudflare Account。
 - [ ] `R0-002` 用户确认测试域名或允许使用受限 workers.dev 地址。
-- [ ] `R0-003` 用户批准创建两个 Worker、两个 D1、一个 Cron Trigger 和一个 Service Binding。
+- [ ] `R0-003` 用户批准创建一个 Platform Worker、至少三个 Test Target Worker、两个 D1、一个 Cron Trigger、每个 Test Target 一组 Queue/DLQ，以及对应的 Service Bindings。
 - [ ] `R0-004` 用户通过安全交互完成 Cloudflare 登录；Token 不进入聊天、命令参数或日志。
 - [ ] `R0-005` 资源名称、region、计划类型和预计保留时间记录在测试运行报告。
 - [ ] `R0-006` 确认没有任何生产资源 ID、Secret 或路由进入测试配置。
