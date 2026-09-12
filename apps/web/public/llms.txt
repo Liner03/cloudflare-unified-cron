@@ -28,6 +28,8 @@ Never place administrator passwords, session cookies, Registration Tokens, Cloud
 
 ## Authenticated read APIs
 
+- [Trigger deliveries](/api/v1/deliveries): `GET`; optional `scheduleId` and `limit=1..1000`; returns recent delivery rows and global status counts. `queued` means durable Queue acceptance, never business success. `businessResult=null` means not reported. Legacy Execution success rates exclude these deliveries.
+
 - [Operational overview](/api/v1/overview): `GET`; schedule counts, recent executions, 24-hour status distribution, success-rate windows, and scheduler state.
 - [List schedules](/api/v1/schedules): `GET`; optional `search`, `target`, and `enabled=true|false` query parameters.
 - [Schedule detail](/api/v1/schedules/{scheduleId}): `GET`; configuration snapshot and recent executions.
@@ -42,6 +44,8 @@ Never place administrator passwords, session cookies, Registration Tokens, Cloud
 - [Registration Tokens](/api/v1/registration-tokens): `GET`; metadata only. Raw token values are never returned after the issuing response.
 
 ## Authenticated mutation APIs
+
+- [Scheduler capacity](/api/v1/system/scheduler-settings): `POST`; requires `If-Match` from System `settingsRevision` plus normal mutation headers. Strict JSON: `max_schedules`, `materialize_budget`, `delivery_budget` (1..1000); `rpc_budget` (1..20); `concurrency` (1..10); `per_target_batch` (1..100). System returns the current `schedulerSettings` and `settingsRevision`.
 
 - [Pause schedule](/api/v1/schedules/{scheduleId}/pause): `POST`; JSON `{}` plus `If-Match`; persists an Operator Override.
 - [Resume schedule](/api/v1/schedules/{scheduleId}/resume): `POST`; JSON `{}` plus `If-Match`; clears only the Operator Override.
@@ -59,6 +63,8 @@ Never place administrator passwords, session cookies, Registration Tokens, Cloud
 - [Resume all dispatch](/api/v1/system/resume): `POST`; JSON `{}`; clears the global switch without overriding Target or Schedule guards.
 
 ## Canonical protocol documentation
+
+- [Queue trigger integration](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/queue-worker-integration.md): reliable delivery, website execution, per-delivery result reporting, free-tier boundaries and native Cron migration. `POST /api/v1/delivery-receipts/{deliveryId}` accepts strict JSON `{ "status": "succeeded"|"failed", "summary": string }` using a dedicated `ucrr_` Bearer capability for that delivery. It does not accept Admin Session or Registration Token as a substitute. Exact terminal replay is allowed; conflicting terminal results return 409. Never log the capability or whole Queue message.
 
 - [RPC protocol](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/protocol.md): Cron request/result envelopes, size limits, identity checks, Registration V1, revision semantics, and retry constraints.
 - [Worker integration](https://github.com/Liner03/cloudflare-unified-cron/blob/main/docs/worker-integration.md): SDK usage, business idempotency, Registration publishing, Target allowlisting, and legacy Cron migration.

@@ -12,6 +12,7 @@ import {
 import { getTargetManifest } from "../../targets.manifest";
 import { CronCalculator } from "../cron/cron-calculator";
 import { sha256Hex } from "../security/crypto";
+import { readSchedulerSettings } from "./scheduler-settings";
 
 const existingRegistrationSchema = z.object({
   registration_revision: z.string(),
@@ -80,6 +81,23 @@ export class RegistrationRepository {
     declaration: WorkerRegistrationV1,
     idempotencyInput?: { key: string; rawBody: Uint8Array },
   ): Promise<AppliedRegistration> {
+    if (
+      getTargetManifest(principal.targetId)?.delivery?.mode === "queue" &&
+      declaration.schedules.some(
+        (schedule) =>
+          !declaration.actions.find(
+            (action) =>
+              action.name === schedule.action &&
+              action.version === schedule.actionVersion,
+          )?.idempotent,
+      )
+    ) {
+      throw new DomainError(
+        "invalid",
+        "QUEUE_REQUIRES_IDEMPOTENCY",
+        "Queue 是至少一次投递，必须先实现业务幂等再接入",
+      );
+    }
     if (!getTargetManifest(principal.targetId)) {
       throw new DomainError(
         "forbidden",
@@ -145,7 +163,8 @@ export class RegistrationRepository {
       throw revisionConflict();
     }
     const otherScheduleCount = countSchema.parse(otherScheduleCountValue).count;
-    if (otherScheduleCount + declaration.schedules.length > 50) {
+    const { max_schedules: capacity } = await readSchedulerSettings(this.db);
+    if (otherScheduleCount + declaration.schedules.length > capacity) {
       throw scheduleLimitReached();
     }
     if (
@@ -404,7 +423,7 @@ export class RegistrationRepository {
     }
     statements.push(
       this.db.prepare(
-        `SELECT CASE WHEN COUNT(*) <= 50 THEN 1 ELSE json('') END
+        `SELECT CASE WHEN COUNT(*) <= (SELECT max_schedules FROM scheduler_settings WHERE id=1) THEN 1 ELSE json('') END
            AS schedule_capacity_guard
          FROM schedules
          WHERE managed_by_registration = 1 AND retired_at IS NULL`,
@@ -560,7 +579,7 @@ export class RegistrationRepository {
           .first();
         if (
           countSchema.parse(otherSchedules).count + declaredScheduleCount >
-          50
+          (await readSchedulerSettings(this.db)).max_schedules
         ) {
           throw scheduleLimitReached();
         }
@@ -716,7 +735,7 @@ function scheduleLimitReached(): DomainError {
   return new DomainError(
     "rate_limited",
     "SCHEDULE_LIMIT_REACHED",
-    "平台最多管理 50 个未退役 Schedule",
+    "已达到平台配置的未退役 Schedule 容量",
   );
 }
 

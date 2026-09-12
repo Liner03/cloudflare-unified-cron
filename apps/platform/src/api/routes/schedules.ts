@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeCronDialect } from "@unified-cron/contracts";
 import { ManagedScheduleRepository } from "../../infrastructure/d1/managed-schedule-repository";
 import { CronCalculator } from "../../infrastructure/cron/cron-calculator";
 import { ApiError } from "../errors";
@@ -54,8 +55,21 @@ export function registerScheduleRoutes(app: ApiRouter): void {
     const input = parseOrThrow(cronPreviewSchema, body.value);
     const afterMs =
       input.after === undefined ? Date.now() : Date.parse(input.after);
+    let expression: string;
+    try {
+      expression = normalizeCronDialect(
+        input.cronExpression,
+        input.cronDialect,
+      );
+    } catch (error) {
+      throw new ApiError(
+        422,
+        "UNSUPPORTED_CRON_DIALECT",
+        error instanceof Error ? error.message : "Cron 方言错误",
+      );
+    }
     const values = new CronCalculator().preview(
-      input.cronExpression,
+      expression,
       input.timezone,
       afterMs,
       input.count,

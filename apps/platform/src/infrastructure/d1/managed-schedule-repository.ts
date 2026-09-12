@@ -11,6 +11,8 @@ import { serializeExecutionSummary } from "./execution-view";
 import type { MutationPlan } from "./idempotent-mutation";
 import { CronCalculator } from "../cron/cron-calculator";
 import { RegisteredTargetCatalog } from "./registered-target-catalog";
+import { getTargetManifest } from "../../targets.manifest";
+import { TriggerDeliveryRepository } from "./trigger-delivery-repository";
 
 const scheduleRowSchema = z.object({
   id: z.string(),
@@ -121,7 +123,7 @@ export class ManagedScheduleRepository {
              state.effective_enabled = CASE ? WHEN 'true' THEN 1 ELSE 0 END
            )
          ORDER BY s.name, s.id
-         LIMIT 50`,
+         LIMIT 1000`,
       )
       .bind(
         filters.search,
@@ -149,6 +151,10 @@ export class ManagedScheduleRepository {
     return {
       ...serializeSchedule(row),
       recentExecutions: recent.results.map(serializeExecutionSummary),
+      recentDeliveries: await new TriggerDeliveryRepository(this.db).list(
+        row.id,
+        10,
+      ),
     };
   }
 
@@ -334,6 +340,7 @@ function serializeSchedule(row: ScheduleRow) {
     name: row.name,
     description: row.description,
     targetId: row.target_id,
+    deliveryMode: getTargetManifest(row.target_id)?.delivery?.mode ?? "rpc",
     isDemo: row.target_manifest_revision.startsWith("local-demo-"),
     action: row.action,
     actionVersion: row.action_version,
@@ -368,6 +375,7 @@ function serializeListRow(value: unknown) {
     name: row.name,
     description: row.description,
     targetId: row.target_id,
+    deliveryMode: getTargetManifest(row.target_id)?.delivery?.mode ?? "rpc",
     isDemo: row.target_manifest_revision.startsWith("local-demo-"),
     action: row.action,
     actionVersion: row.action_version,

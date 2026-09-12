@@ -1,4 +1,5 @@
 DELETE FROM api_idempotency;
+DELETE FROM trigger_deliveries;
 DELETE FROM audit_events;
 DELETE FROM attempts;
 DELETE FROM executions;

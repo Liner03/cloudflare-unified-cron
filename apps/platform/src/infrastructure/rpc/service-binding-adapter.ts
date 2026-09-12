@@ -8,9 +8,13 @@ import {
   type TargetManifest,
 } from "@unified-cron/contracts";
 import type { CronEntrypointBase } from "@unified-cron/worker-sdk/entrypoint";
+import { TARGETS } from "../../targets.manifest";
 
 export class ServiceBindingAdapter {
-  constructor(private readonly env: Env) {}
+  constructor(
+    private readonly env: object,
+    private readonly targets: readonly TargetManifest[] = TARGETS,
+  ) {}
 
   async execute(
     target: TargetManifest,
@@ -33,10 +37,16 @@ export class ServiceBindingAdapter {
   private bindingFor(
     bindingName: string,
   ): Service<CronEntrypointBase<Record<string, never>>> {
-    if (bindingName !== "CRON_DATA")
+    if (!this.targets.some((target) => target.binding === bindingName))
       throw new Error("TARGET_BINDING_NOT_CONFIGURED");
-    return this.env.CRON_DATA as Service<
-      CronEntrypointBase<Record<string, never>>
-    >;
+    const binding: unknown = Reflect.get(this.env, bindingName);
+    if (
+      !binding ||
+      typeof binding !== "object" ||
+      typeof Reflect.get(binding, "cron") !== "function" ||
+      typeof Reflect.get(binding, "describe") !== "function"
+    )
+      throw new Error("TARGET_BINDING_NOT_CONFIGURED");
+    return binding as Service<CronEntrypointBase<Record<string, never>>>;
   }
 }

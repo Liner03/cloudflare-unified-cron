@@ -1,0 +1,32 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "worker-data-queue-local",
+  "main": "src/queue-worker.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "BUSINESS_DB",
+      "database_name": "worker-data-local-db",
+      "database_id": "00000000-0000-0000-0000-000000000002",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "worker-data-triggers-local",
+        "max_batch_size": 10,
+        "max_batch_timeout": 1,
+        "max_retries": 3,
+        "dead_letter_queue": "worker-data-triggers-local-dlq",
+      },
+    ],
+  },
+  "vars": {
+    "APP_ENV": "test",
+    "BUILD_ID": "queue-local",
+    "PLATFORM_REGISTRATION_URL": "http://127.0.0.1:8787/api/v1/registration",
+  },
+  "observability": { "enabled": true },
+}

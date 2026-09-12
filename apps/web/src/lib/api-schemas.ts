@@ -26,6 +26,7 @@ export const scheduleBlockingReasonSchema = z.enum([
 ]);
 
 export const scheduleSummarySchema = z.object({
+  deliveryMode: z.enum(["rpc", "queue"]).default("rpc"),
   id: z.string(),
   key: z.string(),
   name: z.string(),
@@ -255,6 +256,8 @@ export const executionDetailSchema = z.object({
 export const systemSchema = z.object({
   data: z
     .object({
+      schedulerSettings: z.record(z.string(), z.number()).optional(),
+      settingsRevision: z.number().optional(),
       dispatch_paused: z.number(),
       last_tick_id: z.string().nullable(),
       last_tick_scheduled_at: z.number().nullable(),

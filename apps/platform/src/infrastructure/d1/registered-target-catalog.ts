@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { TargetManifest } from "@unified-cron/contracts";
-import { getTargetManifest } from "../../targets.manifest";
+import { TARGETS } from "../../targets.manifest";
 
 const registeredActionRowSchema = z.object({
   name: z.string(),
@@ -34,14 +34,23 @@ export interface RegisteredTargetCapability {
  * Callers never need to know how physical bindings and declared actions are joined.
  */
 export class RegisteredTargetCatalog {
-  constructor(private readonly db: D1Database) {}
+  constructor(
+    private readonly db: D1Database,
+    private readonly manifest: readonly TargetManifest[] = TARGETS,
+  ) {}
+
+  queueTargetIds() {
+    return this.manifest
+      .filter((target) => target.delivery?.mode === "queue")
+      .map((target) => target.id);
+  }
 
   async findCapability(
     targetId: string,
     actionName: string,
     actionVersion: number,
   ): Promise<RegisteredTargetCapability | null> {
-    const target = getTargetManifest(targetId);
+    const target = this.manifest.find((target) => target.id === targetId);
     if (!target) return null;
     const value = await this.db
       .prepare(

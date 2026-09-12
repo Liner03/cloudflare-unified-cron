@@ -29,7 +29,7 @@ Execution 保持 running，租约到期后恢复为 unknown 或安全 retry_wait
 
 ### 集中到期
 
-V1 每 Tick 最多派发 2 个 Attempt。大量整点 Schedule 会产生 dispatch lag。优先错开分钟；提高批量前必须测量 CPU、D1 statements 与 rows。
+当前预算来自 D1 `scheduler_settings`，控制台可修改。默认每轮最多物化 100 条规则、投递 100 个 Queue 消息或开始 10 个兼容 RPC（RPC 并发 5）。Queue 与 RPC 共享物化预算，RPC 有保留额度。大量整点任务可能产生 dispatch lag，提高配置前应测量 CPU、D1 和 Queue quota。Queue“已入队”不等于业务成功；在“触发记录”查看独立业务回报。
 
 ## 人工操作
 

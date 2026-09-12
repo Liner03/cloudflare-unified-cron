@@ -1,5 +1,7 @@
 # V1 架构实现说明
 
+本文保留 V1 同步 RPC 的设计背景。2026-09-12 起的新增 Queue 投递、100 规则配置与多 Target 入口以 [ADR 0003](adr/0003-independent-trigger-delivery.md) 和 [Queue 接入指南](queue-worker-integration.md) 为准。下文的固定 2/2 与 50 条容量是历史值，当前预算来自 D1 `scheduler_settings`。
+
 ## 部署单元
 
 生产部署包含一个平台 Worker、一个 `* * * * *` Cron Trigger、一个平台 D1 和一组 Workers Static Assets。每个业务 Worker 独立部署，通过预声明的 Service Binding 命名入口连接。

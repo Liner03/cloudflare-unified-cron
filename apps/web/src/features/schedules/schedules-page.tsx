@@ -108,6 +108,19 @@ export function SchedulesPage() {
       header: "最近 / 状态",
       cell: ({ row }) => {
         const schedule = row.original;
+        if (schedule.deliveryMode === "queue")
+          return (
+            <div>
+              <Link to={`/deliveries?scheduleId=${schedule.id}`}>
+                查看触发记录
+              </Link>
+              <div className="text-xs text-muted-foreground">
+                {schedule.effectiveEnabled
+                  ? "网站独立执行"
+                  : formatScheduleBlockingReasons(schedule.blockingReasons)}
+              </div>
+            </div>
+          );
         const status = schedule.effectiveEnabled
           ? (schedule.lastExecution?.status ?? "enabled")
           : "schedule_paused";

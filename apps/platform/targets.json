@@ -1,0 +1,11 @@
+[
+  {
+    "id": "DATA",
+    "label": "Data Worker",
+    "binding": "CRON_DATA",
+    "service": "worker-data",
+    "entrypoint": "CronEntrypoint",
+    "protocolVersion": 1,
+    "manifestRevision": "data-v1"
+  }
+]

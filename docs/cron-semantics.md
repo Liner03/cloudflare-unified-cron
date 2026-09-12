@@ -1,5 +1,7 @@
 # Cron 语义
 
+原生 Cloudflare 迁移：Registration Schedule 与 Cron preview 可指定 `cronDialect: "cloudflare"`，转换数字星期和月份/星期名称后存储为本文的 Unix 方言；默认仍为 Unix。未支持的原生扩展明确拒绝。详见 [接入指南](queue-worker-integration.md)。下文 OVERLAP/unknown 阻塞属于同步 RPC 模式；Queue 模式业务结果未上报不阻止未来 occurrence。
+
 ## 方言
 
 平台只接受 Unix 五字段数字子集：

@@ -1,4 +1,14 @@
 import { z } from "zod";
+import { jsonValueSchema, type JsonValue } from "./json";
+export { jsonValueSchema, type JsonValue } from "./json";
+import { normalizeCronDialect } from "./cron-dialect";
+export { normalizeCronDialect } from "./cron-dialect";
+export {
+  triggerMessageSchema,
+  triggerResultSchema,
+  type TriggerMessage,
+  type TriggerResult,
+} from "./trigger";
 
 export {
   BoundedJsonError,
@@ -6,20 +16,6 @@ export {
   type BoundedJsonErrorReason,
   type BoundedJsonResult,
 } from "./bounded-json";
-
-export type JsonValue =
-  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-
-export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.null(),
-    z.boolean(),
-    z.number().finite(),
-    z.string(),
-    z.array(jsonValueSchema),
-    z.record(z.string(), jsonValueSchema),
-  ]),
-);
 
 export const cronRequestV1Schema = z.object({
   protocolVersion: z.literal(1),
@@ -109,6 +105,7 @@ const registrationScheduleSchema = z
     action: z.string().trim().min(1).max(128),
     actionVersion: z.number().int().min(1),
     cronExpression: z.string().trim().min(1).max(128),
+    cronDialect: z.enum(["unix", "cloudflare"]).optional(),
     timezone: z.string().trim().min(1).max(128).default("UTC"),
     enabled: z.boolean().default(true),
     payload: jsonValueSchema.default({}),
@@ -117,7 +114,25 @@ const registrationScheduleSchema = z
     misfirePolicy: z.enum(["coalesce", "skip"]).default("coalesce"),
     misfireGraceSeconds: z.number().int().min(0).max(86_400).default(300),
   })
-  .strict();
+  .strict()
+  .transform(({ cronDialect, ...schedule }, ctx) => {
+    try {
+      return {
+        ...schedule,
+        cronExpression: normalizeCronDialect(
+          schedule.cronExpression,
+          cronDialect,
+        ),
+      };
+    } catch (error) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cronExpression"],
+        message: error instanceof Error ? error.message : "Cron 方言错误",
+      });
+      return z.NEVER;
+    }
+  });
 
 export const workerRegistrationV1Schema = z
   .object({
@@ -125,7 +140,7 @@ export const workerRegistrationV1Schema = z
     registrationRevision: z.string().trim().min(1).max(128),
     worker: z.object({ label: z.string().trim().min(1).max(100) }).strict(),
     actions: z.array(registrationActionSchema).max(100),
-    schedules: z.array(registrationScheduleSchema).max(50),
+    schedules: z.array(registrationScheduleSchema).max(1000),
   })
   .strict()
   .superRefine((value, context) => {
@@ -193,7 +208,28 @@ export interface TargetManifest {
   entrypoint: "CronEntrypoint";
   protocolVersion: 1;
   manifestRevision: string;
+  delivery?: { mode: "queue"; binding: string; queue: string } | undefined;
 }
+
+export const targetManifestSchema = z
+  .object({
+    id: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+    label: z.string().min(1).max(100),
+    binding: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+    service: z.string().min(1),
+    entrypoint: z.literal("CronEntrypoint"),
+    protocolVersion: z.literal(1),
+    manifestRevision: z.string().min(1),
+    delivery: z
+      .object({
+        mode: z.literal("queue"),
+        binding: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+        queue: z.string().min(1),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
 export interface CronTargetDescriptionV1 {
   protocolVersion: 1;

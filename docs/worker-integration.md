@@ -1,5 +1,7 @@
 # 业务 Worker 接入
 
+本文为同步 RPC 兼容模式。需要平台只负责可靠触发、网站独立执行时，使用 [Queue 接入指南](queue-worker-integration.md)。多网站的物理配置来源现在是 `apps/platform/targets.json`，通过 `pnpm targets:generate` 生成 bindings 与同步 SQL；不再修改 RPC 适配器。
+
 ## 1. 增加命名入口
 
 保留现有 default fetch，只增加 `CronEntrypoint`：
@@ -120,9 +122,9 @@ Cloudflare Worker 没有通用的“部署完成”运行时 hook。应从现有
 ## 4. 声明物理平台白名单
 
 1. 在目标 Worker 部署 `CronEntrypoint`。
-2. 在平台 `wrangler.jsonc` 的 `services` 添加 binding、service、entrypoint。
-3. 在 `targets.manifest.ts` 只添加 Target id、label、binding、service、entrypoint 与 protocol version。
-4. 更新 `seed/targets.sql`，执行显式 manifest sync。
+2. 在平台 `targets.json` 添加 Target id、label、binding、service、entrypoint 与 protocol version。
+3. 运行 `pnpm targets:generate` 生成 bindings 和 `seed/targets.sql`，再运行 Wrangler types；`pnpm targets:check` 检查配置一致性。
+4. 执行显式 manifest sync；Queue 模式还需按其指南配置 producer/consumer 和独立签名 Secret。
 5. 在控制台签发 Token，由 Worker 发布 Registration。
 6. 调用 Target check，核对无副作用 `describe()` 与最新 Registration。
 7. 检查声明和下一次时间，等待测试 Schedule 的下一次定时发生并核对结果。

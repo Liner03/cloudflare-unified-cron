@@ -20,6 +20,7 @@ const primaryNav = [
   { to: "/", label: "运行总览", icon: Activity },
   { to: "/targets", label: "网站", icon: Globe2 },
   { to: "/executions", label: "执行记录", icon: Clock3 },
+  { to: "/deliveries", label: "触发记录", icon: CalendarClock },
 ];
 
 const secondaryNav = [
@@ -32,6 +33,7 @@ const titles: Record<string, string> = {
   "/": "运行总览",
   "/schedules": "所有 Cron",
   "/executions": "执行记录",
+  "/deliveries": "触发记录",
   "/targets": "网站",
   "/registrations": "网站接入",
   "/system": "调度设置",

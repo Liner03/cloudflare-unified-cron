@@ -31,6 +31,7 @@ import {
   systemSchema,
 } from "@/lib/api-schemas";
 import { formatTime, shortId } from "@/lib/format";
+import { SchedulerSettingsForm } from "./scheduler-settings-form";
 
 export function SystemPage() {
   const queryClient = useQueryClient();
@@ -75,6 +76,13 @@ export function SystemPage() {
 
   return (
     <>
+      {state.schedulerSettings && state.settingsRevision && (
+        <SchedulerSettingsForm
+          key={state.settingsRevision}
+          settings={state.schedulerSettings}
+          revision={state.settingsRevision}
+        />
+      )}
       <PageHeader
         action={
           paused ? (

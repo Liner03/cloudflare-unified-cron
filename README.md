@@ -1,8 +1,8 @@
 # Cloudflare Unified Cron Platform
 
-一个部署在单个 Cloudflare Account 内的统一 Cron 控制平台：用一个原生分钟级 Cron Trigger，从 D1 物化逻辑 Schedule，通过 Service Binding RPC 调用独立业务 Worker，并持久化 Execution、Attempt、有限重试与人工审计。
+一个部署在单个 Cloudflare Account 内的统一 Cron 触发平台：用一个原生分钟级 Cron Trigger 管理多个网站的逻辑定时规则。Queue 模式可靠投递后由网站 Worker 独立执行业务；同步 Service Binding RPC 作为兼容模式保留。
 
-本仓库实现架构规格 V1。它不是通用 Job Queue，也不依赖 KV、Queues、Durable Objects、Workflows、Redis 或跨账号 HTTP。
+默认支持配置 100 条规则，容量、投递批量和 RPC 并发可在控制台调整。已有 DATA Target 保留 RPC；独立执行模式按 [Queue 接入指南](docs/queue-worker-integration.md) 显式配置。100 条规则不等于免费承诺 100/min 持续吞吐；新架构远程 Free 额度测试仍待执行。
 
 ## 架构边界
 
@@ -12,7 +12,8 @@ Cloudflare Cron (* * * * *)
         ▼
 Platform Worker ── D1（计划、执行、租约、重试、审计）
         │
-        └── Service Binding RPC ──► 业务 Worker / CronEntrypoint
+        ├── Queue（可靠投递） ──► 网站 Worker / queue()（独立执行业务）
+        └── Service Binding RPC ──► 网站 Worker / CronEntrypoint（兼容模式）
 
 Registrant Worker ── scoped token ──► PUT /api/v1/registration
 Administrator ── local session ──► React SPA + operator API
@@ -63,6 +64,8 @@ pnpm dev                  Vite + 平台 Worker + 示例 Worker
 pnpm db:migrate:local     迁移示例业务 D1 与平台 D1
 pnpm seed:local           幂等写入示例物理 Target（不创建可见 Schedule）
 pnpm targets:sync:local   只同步部署 Target 元数据
+pnpm targets:generate     从 targets.json 生成 bindings 与同步 SQL（仅本地文件）
+pnpm targets:check        检查 Target 配置是否一致
 pnpm lint                 ESLint，包括 no-floating-promises
 pnpm typecheck            全 workspace TypeScript strict
 pnpm test:unit            协议、SDK、Cron、状态/重试策略

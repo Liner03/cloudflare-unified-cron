@@ -144,7 +144,7 @@ export class TargetRepository {
            FROM schedules
            WHERE target_id = ? AND managed_by_registration = 1
              AND retired_at IS NULL
-           ORDER BY name LIMIT 50`,
+           ORDER BY name LIMIT 1000`,
         )
         .bind(targetId)
         .all(),

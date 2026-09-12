@@ -7,6 +7,7 @@
     "dev": "wrangler dev --config wrangler.local.jsonc --port 8788 --inspector-port 9230",
     "dev:e2e": "wrangler dev --config wrangler.local.jsonc --port 8788 --inspector-port 9230",
     "build": "wrangler deploy --config wrangler.local.jsonc --dry-run --outdir dist",
+    "build:queue": "wrangler deploy --config wrangler.queue.local.jsonc --dry-run --outdir dist/queue",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "types": "wrangler types --config wrangler.jsonc --strict-vars false worker-configuration.d.ts",
     "db:migrate:local": "wrangler d1 migrations apply worker-data-local-db --local --config wrangler.local.jsonc",

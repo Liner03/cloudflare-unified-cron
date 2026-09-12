@@ -14,6 +14,10 @@ import {
   enforceMutationRequest,
 } from "../infrastructure/auth/access";
 import { requireIdempotencyKey } from "./idempotent-mutation";
+import {
+  registerDeliveryReceiptRoute,
+  registerDeliveryRoutes,
+} from "./routes/deliveries";
 
 const app = createApiRouter();
 
@@ -48,6 +52,7 @@ app.onError((error, context) =>
 
 registerAuthRoutes(app);
 registerWorkerRegistrationRoute(app);
+registerDeliveryReceiptRoute(app);
 
 app.use("*", authenticate);
 app.use("*", async (context, next) => {
@@ -65,6 +70,7 @@ registerExecutionRoutes(app);
 registerSystemRoutes(app);
 registerRegistrationTokenRoutes(app);
 registerSuccessRateRoutes(app);
+registerDeliveryRoutes(app);
 
 app.all("*", () => {
   throw new ApiError(404, "NOT_FOUND", "API endpoint not found");

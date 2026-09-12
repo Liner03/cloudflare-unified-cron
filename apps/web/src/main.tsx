@@ -15,6 +15,11 @@ const OverviewPage = lazy(() =>
     default: module.OverviewPage,
   })),
 );
+const DeliveriesPage = lazy(() =>
+  import("@/features/deliveries/deliveries-page").then((module) => ({
+    default: module.DeliveriesPage,
+  })),
+);
 const SchedulesPage = lazy(() =>
   import("@/features/schedules/schedules-page").then((module) => ({
     default: module.SchedulesPage,
@@ -77,6 +82,7 @@ const router = createBrowserRouter([
       { path: "schedules", element: load(<SchedulesPage />) },
       { path: "schedules/:id", element: load(<ScheduleDetailPage />) },
       { path: "executions", element: load(<ExecutionsPage />) },
+      { path: "deliveries", element: load(<DeliveriesPage />) },
       { path: "executions/:id", element: load(<ExecutionDetailPage />) },
       { path: "targets", element: load(<TargetsPage />) },
       { path: "registrations", element: load(<RegistrationsPage />) },

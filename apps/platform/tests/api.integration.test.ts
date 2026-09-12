@@ -44,6 +44,9 @@ let adminCookie = "";
 describe("registered control plane API", () => {
   beforeEach(async () => {
     await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE scheduler_settings SET max_schedules=100 WHERE id=1",
+      ),
       env.DB.prepare("DELETE FROM api_idempotency"),
       env.DB.prepare("DELETE FROM audit_events"),
       env.DB.prepare("DELETE FROM attempts"),
@@ -85,6 +88,45 @@ describe("registered control plane API", () => {
 
     const listed = await adminGet("/api/v1/registration-tokens");
     expect(JSON.stringify(await listed.json())).not.toContain(token);
+  });
+
+  it("updates scheduler capacity with optimistic concurrency and idempotent replay", async () => {
+    const current = await adminGet("/api/v1/system");
+    const state = await current.json<{
+      data: {
+        schedulerSettings: Record<string, number>;
+        settingsRevision: number;
+      };
+    }>();
+    const input = { ...state.data.schedulerSettings, max_schedules: 125 };
+    const revision = state.data.settingsRevision;
+    const key = `settings:${crypto.randomUUID()}`;
+    const first = await adminMutateWithKey(
+      "/api/v1/system/scheduler-settings",
+      input,
+      key,
+      { "If-Match": `"${revision}"` },
+    );
+    expect(first.status).toBe(200);
+    const replay = await adminMutateWithKey(
+      "/api/v1/system/scheduler-settings",
+      input,
+      key,
+      { "If-Match": `"${revision}"` },
+    );
+    expect(await replay.json()).toEqual(await first.json());
+    const stale = await adminMutate(
+      "/api/v1/system/scheduler-settings",
+      input,
+      { "If-Match": `"${revision}"` },
+    );
+    expect(stale.status).toBe(409);
+    const invalid = await adminMutate(
+      "/api/v1/system/scheduler-settings",
+      { ...input, rpc_budget: 100 },
+      { "If-Match": `"${revision + 1}"` },
+    );
+    expect(invalid.status).toBe(422);
   });
 
   it("idempotently issues one token without persisting its raw value", async () => {
@@ -378,7 +420,40 @@ describe("registered control plane API", () => {
     expect(await count("schedules")).toBe(50);
   });
 
+  it("registers 100 schedules through the public API and preserves updates at capacity", async () => {
+    const token = await issuedToken();
+    const schedules = Array.from({ length: 100 }, (_, index) => ({
+      ...baseRegistration.schedules[0],
+      key: `capacity-${index}`,
+      name: `Capacity ${index}`,
+    }));
+    const first = await register(token, {
+      ...baseRegistration,
+      registrationRevision: "capacity-100",
+      schedules,
+    });
+    expect(first.status).toBe(200);
+    const list = await adminGet("/api/v1/schedules");
+    expect((await list.json<{ data: unknown[] }>()).data).toHaveLength(100);
+    const update = await register(token, {
+      ...baseRegistration,
+      registrationRevision: "capacity-update",
+      schedules: schedules.map((s) => ({ ...s, name: s.name + " updated" })),
+    });
+    expect(update.status).toBe(200);
+    const tooMany = await register(token, {
+      ...baseRegistration,
+      registrationRevision: "capacity-too-many",
+      schedules: [...schedules, { ...schedules[0], key: "one-too-many" }],
+    });
+    expect(tooMany.status).toBe(429);
+    expect(await count("schedules")).toBe(100);
+  });
+
   it("enforces the 50 Schedule limit across all targets", async () => {
+    await env.DB.prepare(
+      "UPDATE scheduler_settings SET max_schedules=50 WHERE id=1",
+    ).run();
     await env.DB.prepare(
       `INSERT INTO targets (
          id, label, enabled, manifest_revision, created_at, updated_at

@@ -11,6 +11,7 @@ import {
   type CronRequestV1,
 } from "@unified-cron/contracts";
 import { z } from "zod";
+import { consumeTriggers } from "./queue-trigger";
 
 const scenarioModeSchema = z.enum([
   "success",
@@ -530,6 +531,7 @@ async function secretsEqual(left: string, right: string): Promise<boolean> {
 }
 
 export default {
+  queue: consumeTriggers,
   async fetch(request, env): Promise<Response> {
     if (new URL(request.url).pathname.startsWith("/__test/")) {
       try {

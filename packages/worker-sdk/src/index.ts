@@ -9,6 +9,7 @@ import {
   type JsonValue,
 } from "@unified-cron/contracts";
 import type { z } from "zod";
+export { createTriggerConsumer, reportTriggerResult } from "./queue-consumer";
 
 export {
   RegistrationError,

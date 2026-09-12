@@ -84,6 +84,15 @@ export function ScheduleDetailPage() {
         title={schedule.name}
       />
       <div className="mb-5 flex flex-wrap gap-2">
+        {schedule.deliveryMode === "queue" && (
+          <div className="w-full">
+            <Link to={`/deliveries?scheduleId=${id}`}>查看投递与业务回报</Link>
+            <p>
+              网站 Worker
+              独立执行；暂停仅阻止后续投递，已入队消息需在执行端管理。
+            </p>
+          </div>
+        )}
         {schedule.isDemo ? (
           <div className="demo-readonly-note">
             <StatusBadge status="local_demo" />

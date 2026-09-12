@@ -1,5 +1,58 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("keeps Queue acceptance separate from business success", async ({
+  page,
+}) => {
+  await login(page, "/deliveries");
+  await page.route("**/api/v1/deliveries?*", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            id: "delivery-ui",
+            scheduleId: "schedule-ui",
+            targetId: "SITE_A",
+            scheduledFor: "2026-09-12T00:00:00Z",
+            status: "queued",
+            attempts: 1,
+            lastError: null,
+            businessResult: null,
+          },
+        ],
+        summary: [
+          {
+            status: "queued",
+            count: 1,
+            oldest: Date.parse("2026-09-12T00:00:00Z"),
+          },
+        ],
+      },
+    }),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "触发记录", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("未上报", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "SITE_A 查看计划", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("成功", { exact: true })).toHaveCount(0);
+});
+
+test("shows configurable scheduler budgets from the real API", async ({
+  page,
+}) => {
+  await login(page, "/system");
+  await expect(
+    page.getByRole("heading", { name: "触发容量", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("规则总数", { exact: true })).toHaveValue("100");
+  await expect(page.getByLabel("每轮投递任务数", { exact: true })).toHaveValue(
+    "100",
+  );
+});
+
 test("keeps the login layout balanced across viewport sizes", async ({
   page,
 }) => {

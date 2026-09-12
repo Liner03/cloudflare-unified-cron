@@ -9,9 +9,8 @@ import {
 } from "../infrastructure/d1/execution-repository";
 import { ServiceBindingAdapter } from "../infrastructure/rpc/service-binding-adapter";
 import { RegisteredTargetCatalog } from "../infrastructure/d1/registered-target-catalog";
+import type { TriggerDeliveryApplication } from "./deliver-triggers";
 
-const MAX_MATERIALIZE_PER_TICK = 2;
-const MAX_ATTEMPTS_PER_TICK = 2;
 const MAX_RECOVERIES_PER_TICK = 2;
 const TICK_SOFT_WALL_BUDGET_MS = 45_000;
 const FINALIZE_RESERVE_MS = 2_000;
@@ -33,6 +32,7 @@ export class TickApplication {
     private readonly clock: Clock,
     private readonly instanceId: string,
     private readonly buildVersion: string,
+    private readonly deliveries?: TriggerDeliveryApplication,
   ) {}
 
   async run(scheduledAt: number): Promise<TickResult> {
@@ -58,10 +58,26 @@ export class TickApplication {
       if (state.dispatchPaused) {
         outcome = "paused";
       } else {
+        const settings = await this.repository.settings();
         const due = await this.repository.listDue(
           this.clock.nowMs(),
-          MAX_MATERIALIZE_PER_TICK,
+          Math.min(settings.materialize_budget, settings.rpc_budget),
         );
+        if (this.deliveries) {
+          const delivery = await this.deliveries.run(
+            {
+              ...settings,
+              materialize_budget: Math.max(
+                0,
+                settings.materialize_budget - due.length,
+              ),
+            },
+            () => this.clock.nowMs(),
+          );
+          materialized += delivery.materialized;
+          dispatched += delivery.queued;
+          errors += delivery.errors;
+        }
         for (const schedule of due) {
           if (
             await this.repository.materializeDue(schedule, this.clock.nowMs())
@@ -71,23 +87,33 @@ export class TickApplication {
 
         const ready = await this.repository.listReady(
           this.clock.nowMs(),
-          MAX_ATTEMPTS_PER_TICK,
+          settings.rpc_budget,
         );
-        const tasks: Array<Promise<boolean>> = [];
-        for (const execution of ready) {
-          const remaining =
-            TICK_SOFT_WALL_BUDGET_MS - (this.clock.nowMs() - startedAt);
-          const snapshot = parseSnapshot(execution.snapshot_json);
-          if (remaining < snapshot.timeoutMs + FINALIZE_RESERVE_MS) break;
-          const claimed = await this.repository.claim(
-            execution,
-            this.clock.nowMs(),
-          );
-          if (claimed) tasks.push(this.dispatch(claimed, tickId));
-        }
+        let cursor = 0;
+        const tasks = Array.from(
+          { length: Math.min(settings.concurrency, ready.length) },
+          async () => {
+            let completed = 0;
+            while (cursor < ready.length) {
+              const execution = ready[cursor++];
+              if (!execution) break;
+              const remaining =
+                TICK_SOFT_WALL_BUDGET_MS - (this.clock.nowMs() - startedAt);
+              const snapshot = parseSnapshot(execution.snapshot_json);
+              if (remaining < snapshot.timeoutMs + FINALIZE_RESERVE_MS) break;
+              const claimed = await this.repository.claim(
+                execution,
+                this.clock.nowMs(),
+              );
+              if (claimed && (await this.dispatch(claimed, tickId)))
+                completed++;
+            }
+            return completed;
+          },
+        );
         const results = await Promise.allSettled(tasks);
         for (const result of results) {
-          if (result.status === "fulfilled" && result.value) dispatched += 1;
+          if (result.status === "fulfilled") dispatched += result.value;
           else errors += 1;
         }
         if (errors > 0) outcome = "degraded";

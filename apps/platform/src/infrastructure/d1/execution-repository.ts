@@ -8,6 +8,7 @@ import {
 } from "../../domain/model";
 import { CronCalculator } from "../cron/cron-calculator";
 import { RegisteredTargetCatalog } from "./registered-target-catalog";
+import { readSchedulerSettings } from "./scheduler-settings";
 
 const AUTOMATIC_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LEASE_MS = 90_000;
@@ -81,6 +82,9 @@ export interface FinalizeDecision {
 }
 
 export class ExecutionRepository {
+  settings() {
+    return readSchedulerSettings(this.db);
+  }
   constructor(
     private readonly db: D1Database,
     private readonly cron: CronCalculator,
@@ -177,10 +181,11 @@ export class ExecutionRepository {
          WHERE s.enabled = 1 AND s.managed_by_registration = 1
            AND s.retired_at IS NULL AND s.archived_at IS NULL
            AND s.next_run_at <= ?
+           AND s.target_id NOT IN (SELECT value FROM json_each(?))
          ORDER BY s.next_run_at, s.id
          LIMIT ?`,
       )
-      .bind(nowMs, limit)
+      .bind(nowMs, JSON.stringify(this.targets.queueTargetIds()), limit)
       .all();
     return z.array(dueScheduleSchema).parse(result.results);
   }
