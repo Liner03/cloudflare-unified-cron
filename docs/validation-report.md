@@ -1,5 +1,17 @@
 # Validation Report
 
+## 最新：2026-09-12 触发架构修复（本地）
+
+实现提交：`abee082a8990afdea90f4f7878e8fb5fefbef48f`。`pnpm verify` 在固定提交上退出码 0：Contracts 18、SDK 11、Platform unit 34、Platform integration 66、网站 Worker integration 11、E2E 39，合计 179 项。
+
+多 Target 绑定、100 条规则注册/列表/批量投递、可配置预算、独立 Queue 消费者、投递/业务结果分离、专用结果回报凭据、Cloudflare Cron 方言转换与 UI 已在本地完成验证。完整 Tick 的 35 秒网站业务用例证明：平台先完成投递，其他网站照常执行，慢网站随后完成。100 条大 payload 的 D1/Queue 分批边界与混合 RPC/Queue 总预算也通过。
+
+证据：[2026-09-12 本地记录](test-runs/2026-09-12-local.md)；架构：[ADR 0003](adr/0003-independent-trigger-delivery.md)；接入：[Queue 指南](queue-worker-integration.md)。
+
+当前仓库保留已有 DATA 的 RPC 模式；需要网站独立执行时显式配置 Queue Target。新模式未部署到 Cloudflare，`R7-009`..`R7-012` 与受影响的远程回归尚未执行；不能据本地测试声称 100/min 在 Free 上已验证。此前删除的 Staging 资源未重建。
+
+以下为 2026-09-11 旧同步 RPC 版本的历史验证结果，不能沿用为新架构的远程 PASS。
+
 后续验证以 [测试执行计划](test-plan.md) 为执行清单；本文只记录已经完成并有证据支持的结果。
 
 日期：2026-09-11。环境：macOS arm64、Node.js 24.19.0、pnpm 11.21.0、Wrangler 4.129.1；本地与隔离 Cloudflare Staging。
