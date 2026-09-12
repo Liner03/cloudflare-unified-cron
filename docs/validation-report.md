@@ -1,5 +1,15 @@
 # Validation Report
 
+## 最新：2026-09-12 Queue 架构 Staging 联调
+
+部署提交：`8941a6d1f9dcc1b81fc1e9d2ef1a7a64fe7219b9`。在已确认的独立测试账号中创建并部署一个 Platform Worker、三个真实 Test Target Worker、两个专用 D1、三组 Queue/DLQ、对应 Service Bindings，以及唯一一个原生 `* * * * *` Cron Trigger。全部资源使用 `unified-cron-*` 名称；未读取或修改其他项目资源。
+
+已验证通过：三个网站 Worker 的独立 Queue consumer、真实 Registration 与 Token 轮换、Service Binding `describe()` 兼容检查、管理员登录/Session/Origin、Static Assets、`/llms.txt`、JSON API 404、请求边界、Cookie 安全属性以及 D1/公开内容无原始凭据。10 条分钟规则已按 4/3/3 分布到三个真实 Worker，平台已安全暂停且无在途 Delivery/Execution。
+
+关键失败：Cloudflare API 确认 `unified-cron-platform-test` 上确实保存了一条 `* * * * *` Trigger（创建于 `2026-09-12T10:07:20Z`，重应用于 `13:16:06Z`），但截至 `13:46:33Z`，Platform D1 的 `last_tick_*` 和 `build_version` 仍全部为空，Delivery 为 0。等待已超过 Cloudflare 文档所述最长 15 分钟传播窗口。Wrangler OAuth 可以只读确认 Schedule，但缺少 Workers Observability 权限，无法取得持久化 invocation trace；未登录的 Dashboard 浏览器没有切换到其他账号。
+
+因此当前不能声明“完全代替 Cloudflare Trigger”或 Free 下 10/25/50/100 已通过。`R3-002` 为 FAIL，`R3-003..009` 与 `R7-009..012` 受其阻塞；25/50/100 档未继续制造流量。资源目前保留且全局派发暂停，若底层 Trigger 延迟恢复，不会继续入队测试任务。逐项证据见 [2026-09-12 Staging 记录](test-runs/2026-09-12-staging.md)。
+
 ## 最新：2026-09-12 触发架构修复（本地）
 
 实现提交：`abee082a8990afdea90f4f7878e8fb5fefbef48f`。`pnpm verify` 在固定提交上退出码 0：Contracts 18、SDK 11、Platform unit 34、Platform integration 66、网站 Worker integration 11、E2E 39，合计 179 项。
@@ -8,7 +18,7 @@
 
 证据：[2026-09-12 本地记录](test-runs/2026-09-12-local.md)；架构：[ADR 0003](adr/0003-independent-trigger-delivery.md)；接入：[Queue 指南](queue-worker-integration.md)。
 
-当前仓库保留已有 DATA 的 RPC 模式；需要网站独立执行时显式配置 Queue Target。新模式未部署到 Cloudflare，`R7-009`..`R7-012` 与受影响的远程回归尚未执行；不能据本地测试声称 100/min 在 Free 上已验证。此前删除的 Staging 资源未重建。
+当前仓库保留已有 DATA 的 RPC 模式；需要网站独立执行时显式配置 Queue Target。新模式已经部署到隔离 Staging，但因本轮原生 Cron 未产生 Tick，`R7-009`..`R7-012` 未通过；不能据本地测试声称 100/min 在 Free 上已验证。此前旧 Staging 证据仍不得沿用。
 
 以下为 2026-09-11 旧同步 RPC 版本的历史验证结果，不能沿用为新架构的远程 PASS。
 

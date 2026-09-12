@@ -77,7 +77,7 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 
 在进入远程测试前，Test Target Worker 必须满足：
 
-- [ ] `TTW-001` 使用仓库 Worker SDK 实现真实 `CronEntrypoint.describe()` 与 `cron()`。
+- [ ] `TTW-001` 使用仓库 Worker SDK 实现真实 `CronEntrypoint.describe()`；RPC 模式实现 `cron()`，Queue 模式实现 Queue consumer，禁止用 Service Binding 长调用模拟独立执行。
 - [ ] `TTW-002` 使用独立 D1 保存场景配置、RPC 调用收据和幂等结果。
 - [ ] `TTW-003` 控制页/API 受 Cloudflare Access 或独立测试 Secret 保护。
 - [ ] `TTW-004` 每个场景默认只影响下一次 RPC，消费后自动恢复 `success`。
@@ -212,8 +212,8 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 - [ ] `R3-001` 记录 Cron 部署时间并等待配置传播，不用手工 scheduled endpoint 代替本项。
 - [ ] `R3-002` 首次真实 Tick 在 System 页面和 Workers Logs 中可关联。
 - [ ] `R3-003` 测试 Schedule 由真实 Tick 物化，不由浏览器请求直接执行。
-- [ ] `R3-004` Platform 通过真实 Service Binding 调用 Test Target。
-- [ ] `R3-005` Execution、Attempt 和 Test Target D1 收据 identity 完全一致。
+- [ ] `R3-004` Platform 使用 Target 配置的真实投递模式：Queue Target 通过对应 Queue producer，RPC 兼容 Target 通过 Service Binding；不得跨 Target。
+- [ ] `R3-005` Queue 模式的 occurrence/delivery/idempotency identity 与 Test Target D1 收据一致；RPC 模式的 Execution/Attempt identity 保持一致。
 - [ ] `R3-006` succeeded 只在业务 D1 提交后出现。
 - [ ] `R3-007` 浏览器关闭后连续执行仍继续。
 - [ ] `R3-008` UTC scheduledFor、IANA timezone 和 next_run_at 计算一致。
@@ -312,5 +312,5 @@ P0/P1 出现后停止后续破坏性或长时间阶段，保留现场并先修�
 
 - 基线分支：`main`
 - 原始文档基线：`bb612a8`（发布 `/llms.txt`）；原 RPC 版本测试证据与 Staging 清理见 2026-09-10/11 的 test-runs。
-- 最新触发架构实现：`abee082a8990afdea90f4f7878e8fb5fefbef48f`。本地 `pnpm verify` 已通过 179 项，追加 L2-023..031 的证据见 `test-runs/2026-09-12-local.md`。
-- 新 Queue 架构尚未做远程验证；旧测试资源已删除。R7-009..012 及受影响的远程项目不得沿用旧 PASS。
+- 最新触发架构实现：`abee082a8990afdea90f4f7878e8fb5fefbef48f`；三 Target 部署配置修复：`8941a6d1f9dcc1b81fc1e9d2ef1a7a64fe7219b9`。本地 `pnpm verify` 已通过 179 项，追加 L2-023..031 的证据见 `test-runs/2026-09-12-local.md`。
+- 新 Queue 架构已部署到隔离 Staging，Registration、三 Target Service Binding/Queue 配置和安全边界已通过；但唯一原生 Cron 超过官方传播窗口仍未产生 Tick。`R3-002` FAIL，依赖的真实执行、容量和 Soak 项未 PASS，证据见 `test-runs/2026-09-12-staging.md`。旧远程 PASS 不得沿用。
