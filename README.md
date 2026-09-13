@@ -1,8 +1,8 @@
 # Cloudflare Unified Cron Platform
 
-一个部署在单个 Cloudflare Account 内的统一 Cron 触发平台：用一个原生分钟级 Cron Trigger 管理多个网站的逻辑定时规则。Queue 模式可靠投递后由网站 Worker 独立执行业务；同步 Service Binding RPC 作为兼容模式保留。
+一个部署在单个 Cloudflare Account 内的统一 Cron 触发平台：用一个原生分钟级 Cron Trigger 和一个共享 Dispatch Queue 管理多个网站的逻辑定时规则。Platform 的独立 Queue invocation 通过 Service Binding 调用网站 Worker；同步直连 RPC 作为兼容模式保留。
 
-默认支持配置 100 条规则，容量、投递批量和 RPC 并发可在控制台调整。已有 DATA Target 保留 RPC；独立执行模式按 [Queue 接入指南](docs/queue-worker-integration.md) 显式配置。100 条规则不等于免费承诺 100/min 持续吞吐；新架构远程 Free 额度测试仍待执行。
+默认支持配置 100 条规则，容量、投递批量和 RPC 并发可在控制台调整。已有 DATA Target 保留 RPC；独立执行模式按 [Queue 接入指南](docs/queue-worker-integration.md) 显式配置。真实 Cloudflare 已通过 10/25/50/100 同分钟负载；Free Queue 约等于每天 3,333 次正常任务，不是每分钟只能执行 2 次。
 
 ## 架构边界
 
@@ -12,8 +12,9 @@ Cloudflare Cron (* * * * *)
         ▼
 Platform Worker ── D1（计划、执行、租约、重试、审计）
         │
-        ├── Queue（可靠投递） ──► 网站 Worker / queue()（独立执行业务）
-        └── Service Binding RPC ──► 网站 Worker / CronEntrypoint（兼容模式）
+        ├── 共享 Queue ──► Platform queue()（batch size 1）
+        │                         └── Service Binding ──► 网站 CronEntrypoint
+        └── Service Binding RPC ──► 网站 CronEntrypoint（兼容直连模式）
 
 Registrant Worker ── scoped token ──► PUT /api/v1/registration
 Administrator ── local session ──► React SPA + operator API

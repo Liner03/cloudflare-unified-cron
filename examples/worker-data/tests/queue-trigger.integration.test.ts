@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createTriggerConsumer } from "@unified-cron/worker-sdk";
 import type { TriggerMessage } from "@unified-cron/contracts";
 import { executeQueueProbe } from "../src/queue-trigger";
+import { executeQueueProbeCron } from "../src/queue-worker";
 
 const job: TriggerMessage = {
   protocolVersion: 2,
@@ -23,6 +24,34 @@ const job: TriggerMessage = {
   receiptToken: `ucrr_${"t".repeat(43)}`,
 };
 describe("L2-027 website Queue execution", () => {
+  it("executes the shared dispatcher RPC with current Attempt identity", async () => {
+    const result = await executeQueueProbeCron(
+      {
+        protocolVersion: 1,
+        executionId: "shared-execution",
+        attemptId: "shared-attempt",
+        scheduleId: "shared-schedule",
+        targetId: "DATA",
+        action: "queueProbe",
+        actionVersion: 1,
+        source: "cron",
+        dispatchReason: "initial",
+        attemptNumber: 1,
+        scheduledFor: "2026-09-13T00:00:00.000Z",
+        requestedAt: new Date().toISOString(),
+        deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+        idempotencyKey: "shared-rpc-idempotency",
+        payload: {},
+      },
+      env,
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      executionId: "shared-execution",
+      attemptId: "shared-attempt",
+    });
+  });
+
   it("rejects a delivery when the runtime Queue name differs from configuration", async () => {
     let executed = 0;
     const consumer = createTriggerConsumer({

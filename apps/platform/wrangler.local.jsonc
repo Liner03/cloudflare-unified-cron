@@ -26,6 +26,24 @@
     "PUBLIC_ORIGIN": "http://127.0.0.1:5173",
     "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000001",
     "BUILD_VERSION": "local",
+    "DISPATCH_QUEUE_NAME": "unified-cron-dispatch-local",
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "DISPATCH_QUEUE",
+        "queue": "unified-cron-dispatch-local",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "unified-cron-dispatch-local",
+        "dead_letter_queue": "unified-cron-dispatch-local-dlq",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 3,
+      },
+    ],
   },
   "observability": { "enabled": true, "head_sampling_rate": 1 },
 }

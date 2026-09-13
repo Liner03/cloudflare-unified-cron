@@ -2,6 +2,11 @@ import { CronEntrypointBase } from "@unified-cron/worker-sdk/entrypoint";
 import { createRegistrationClient } from "@unified-cron/worker-sdk/registration";
 import { consumeTriggers } from "./queue-trigger";
 import { timingSafeEqual } from "node:crypto";
+import {
+  cronRequestV1Schema,
+  type CronResultV1,
+} from "@unified-cron/contracts";
+import { executeQueueProbe } from "./queue-trigger";
 
 export class CronEntrypoint extends CronEntrypointBase<Env> {
   describe() {
@@ -10,9 +15,53 @@ export class CronEntrypoint extends CronEntrypointBase<Env> {
       actions: [{ name: "queueProbe", version: 1, idempotent: true }],
     });
   }
-  cron(): Promise<unknown> {
-    return Promise.reject(new Error("This Action accepts Queue delivery only"));
+  async cron(input: unknown): Promise<CronResultV1> {
+    return executeQueueProbeCron(input, this.env);
   }
+}
+
+export async function executeQueueProbeCron(
+  input: unknown,
+  env: Env,
+): Promise<CronResultV1> {
+  const request = cronRequestV1Schema.parse(input);
+  if (request.targetId !== env.TARGET_ID)
+    throw new Error("TRIGGER_TARGET_MISMATCH");
+  const result = await executeQueueProbe(
+    {
+      protocolVersion: 2,
+      deliveryId: request.executionId,
+      scheduleId: request.scheduleId,
+      targetId: request.targetId,
+      scheduledFor: request.scheduledFor ?? request.requestedAt,
+      action: request.action,
+      actionVersion: request.actionVersion,
+      payload: request.payload,
+      idempotencyKey: request.idempotencyKey,
+      receiptToken: `ucrr_${"x".repeat(43)}`,
+    },
+    env,
+  );
+  return result.status === "succeeded"
+    ? {
+        protocolVersion: 1,
+        executionId: request.executionId,
+        attemptId: request.attemptId,
+        ok: true,
+        summary: result.summary,
+        targetBuildId: env.BUILD_ID,
+      }
+    : {
+        protocolVersion: 1,
+        executionId: request.executionId,
+        attemptId: request.attemptId,
+        ok: false,
+        error: {
+          code: "QUEUE_PROBE_FAILED",
+          message: result.summary,
+          retryable: false,
+        },
+      };
 }
 export function publishQueueRegistration(env: Env) {
   return createRegistrationClient({

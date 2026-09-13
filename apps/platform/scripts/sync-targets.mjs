@@ -31,11 +31,7 @@ const targets = schema.parse(
 );
 for (const values of [
   targets.map((t) => t.id),
-  targets.flatMap((t) => [
-    t.binding,
-    ...(t.delivery ? [t.delivery.binding] : []),
-  ]),
-  targets.filter((t) => t.delivery).map((t) => t.delivery.queue),
+  targets.map((t) => t.binding),
 ]) {
   if (new Set(values).size !== values.length)
     throw new Error("duplicate Target id, binding, or queue");
@@ -56,9 +52,16 @@ const services = targets.map((t) => ({
   service: t.service,
   entrypoint: t.entrypoint,
 }));
-const producers = targets
-  .filter((t) => t.delivery)
-  .map((t) => ({ binding: t.delivery.binding, queue: t.delivery.queue }));
+const producers = [
+  ...new Map(
+    targets
+      .filter((t) => t.delivery)
+      .map((t) => [
+        `${t.delivery.binding}:${t.delivery.queue}`,
+        { binding: t.delivery.binding, queue: t.delivery.queue },
+      ]),
+  ).values(),
+];
 const quote = (s) => `'${s.replaceAll("'", "''")}'`;
 const sql =
   targets

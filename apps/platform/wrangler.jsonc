@@ -60,6 +60,7 @@
     "PUBLIC_ORIGIN": "https://cron.example.com",
     "PLATFORM_INSTANCE_ID": "REPLACE_WITH_STABLE_UUID",
     "BUILD_VERSION": "REPLACE_WITH_BUILD_VERSION",
+    "DISPATCH_QUEUE_NAME": "unified-cron-dispatch",
   },
   "observability": {
     "enabled": true,
@@ -68,16 +69,17 @@
   "queues": {
     "producers": [
       {
-        "binding": "QUEUE_DATA_A",
-        "queue": "worker-data-a-triggers",
+        "binding": "DISPATCH_QUEUE",
+        "queue": "unified-cron-dispatch",
       },
+    ],
+    "consumers": [
       {
-        "binding": "QUEUE_DATA_B",
-        "queue": "worker-data-b-triggers",
-      },
-      {
-        "binding": "QUEUE_DATA_C",
-        "queue": "worker-data-c-triggers",
+        "queue": "unified-cron-dispatch",
+        "dead_letter_queue": "unified-cron-dispatch-dlq",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 3,
       },
     ],
   },

@@ -18,8 +18,8 @@
     "manifestRevision": "data-a-queue-v1",
     "delivery": {
       "mode": "queue",
-      "binding": "QUEUE_DATA_A",
-      "queue": "worker-data-a-triggers"
+      "binding": "DISPATCH_QUEUE",
+      "queue": "unified-cron-dispatch"
     }
   },
   {
@@ -32,8 +32,8 @@
     "manifestRevision": "data-b-queue-v1",
     "delivery": {
       "mode": "queue",
-      "binding": "QUEUE_DATA_B",
-      "queue": "worker-data-b-triggers"
+      "binding": "DISPATCH_QUEUE",
+      "queue": "unified-cron-dispatch"
     }
   },
   {
@@ -46,8 +46,8 @@
     "manifestRevision": "data-c-queue-v1",
     "delivery": {
       "mode": "queue",
-      "binding": "QUEUE_DATA_C",
-      "queue": "worker-data-c-triggers"
+      "binding": "DISPATCH_QUEUE",
+      "queue": "unified-cron-dispatch"
     }
   }
 ]

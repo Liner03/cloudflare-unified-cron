@@ -13,6 +13,13 @@ const configSchema = z.object({
       entrypoint: z.string(),
     }),
   ),
+  queues: z.object({
+    producers: z.array(z.object({ binding: z.string(), queue: z.string() })),
+    consumers: z.array(
+      z.object({ queue: z.string(), max_batch_size: z.number() }),
+    ),
+  }),
+  vars: z.object({ DISPATCH_QUEUE_NAME: z.string() }),
 });
 
 const packageSchema = z.object({
@@ -41,6 +48,23 @@ describe("deployment manifest", () => {
         entrypoint: target.entrypoint,
       });
     }
+    expect(config.queues.producers).toEqual([
+      { binding: "DISPATCH_QUEUE", queue: "unified-cron-dispatch" },
+    ]);
+    expect(config.queues.consumers).toEqual([
+      expect.objectContaining({
+        queue: "unified-cron-dispatch",
+        max_batch_size: 1,
+      }),
+    ]);
+    expect(config.vars.DISPATCH_QUEUE_NAME).toBe("unified-cron-dispatch");
+    expect(
+      new Set(
+        TARGETS.filter((target) => target.delivery).map(
+          (target) => `${target.delivery!.binding}:${target.delivery!.queue}`,
+        ),
+      ),
+    ).toEqual(new Set(["DISPATCH_QUEUE:unified-cron-dispatch"]));
   });
 
   it("keeps the Queue consumer guard equal to the actual configured Queue", () => {

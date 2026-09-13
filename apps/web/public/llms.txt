@@ -1,6 +1,6 @@
 # Cloudflare Unified Cron Platform
 
-> A private, single-account control plane that turns one Cloudflare Cron Trigger into durable, auditable schedules executed through allowlisted Service Binding RPC targets.
+> A private, single-account control plane that turns one Cloudflare Cron Trigger into durable, auditable schedules dispatched through one shared Queue to allowlisted Service Binding RPC targets.
 
 The browser console and JSON API share one origin. The API base path is `/api/v1`. This is an operations system, not a general job queue: schedules come from Worker Registration, D1 is the control-state source of truth, and RPC side effects remain at-least-once unless the target implements business idempotency.
 

@@ -64,9 +64,11 @@ Agent-operated browser / remote driver
         │      ├── one real * * * * * Cron Trigger
         │      └── Service Binding ──────────────┐
         │                                        │
+        ├── one shared Dispatch Queue + DLQ
+        │      └── Platform queue() consumer (batch size 1)
+        │              └── Service Binding fan-out
         └── at least three unified-cron-test-target-* Workers
                ├── CronEntrypoint ◄─────────────┘
-               ├── one isolated Queue + DLQ per Worker
                ├── dedicated shared Test Target D1
                └── protected scenario-control UI/API
 ```
@@ -77,7 +79,7 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 
 在进入远程测试前，Test Target Worker 必须满足：
 
-- [ ] `TTW-001` 使用仓库 Worker SDK 实现真实 `CronEntrypoint.describe()`；RPC 模式实现 `cron()`，Queue 模式实现 Queue consumer，禁止用 Service Binding 长调用模拟独立执行。
+- [ ] `TTW-001` 使用仓库 Worker SDK 实现真实 `CronEntrypoint.describe()` 与 `cron()`；网站不承担默认共享 Queue consumer。
 - [ ] `TTW-002` 使用独立 D1 保存场景配置、RPC 调用收据和幂等结果。
 - [ ] `TTW-003` 控制页/API 受 Cloudflare Access 或独立测试 Secret 保护。
 - [ ] `TTW-004` 每个场景默认只影响下一次 RPC，消费后自动恢复 `success`。
@@ -175,7 +177,7 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 
 - [ ] `R0-001` 用户确认测试 Cloudflare Account。
 - [ ] `R0-002` 用户确认测试域名或允许使用受限 workers.dev 地址。
-- [ ] `R0-003` 用户批准创建一个 Platform Worker、至少三个 Test Target Worker、两个 D1、一个 Cron Trigger、每个 Test Target 一组 Queue/DLQ，以及对应的 Service Bindings。
+- [ ] `R0-003` 用户批准创建一个 Platform Worker、至少三个 Test Target Worker、两个 D1、一个 Cron Trigger、一组共享 Queue/DLQ，以及对应的 Service Bindings。
 - [ ] `R0-004` 用户通过安全交互完成 Cloudflare 登录；Token 不进入聊天、命令参数或日志。
 - [ ] `R0-005` 资源名称、region、计划类型和预计保留时间记录在测试运行报告。
 - [ ] `R0-006` 确认没有任何生产资源 ID、Secret 或路由进入测试配置。
@@ -269,7 +271,7 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 - [ ] `R7-006` 连续 60 个真实分钟 Tick 的 Cron Soak（至少跨一个 UTC 整点）无未解释的失败、重复副作用或永久 stuck 状态；以 D1、Execution、Attempt 和业务收据聚合为主，不要求持续高频轮询。
 - [ ] `R7-007` Soak 期间至少覆盖一次 Registration 更新和一次安全暂停/恢复。
 - [ ] `R7-008` Overview 成功率与底层 resolved Execution 样本人工复算一致。
-- [ ] `R7-009` Queue 模式在 Free 的 10/25/50/100 同分钟到期负载下记录投递时延、CPU、D1/Queue quota；至少三个真实网站 Worker。
+- [ ] `R7-009` 共享 Queue 模式在 Free 的 10/25/50/100 同分钟到期负载下记录投递时延、CPU、D1/Queue quota；至少三个真实网站 Worker，consumer batch size 必须为 1。
 - [ ] `R7-010` 将 100 条规则、100 个不同 Worker、100/min 持续负载分别评估；超过免费日额度的场景先记录预算缺口，未经批准不制造超额流量。
 - [ ] `R7-011` 真实 Queue 消费在平台调用结束后继续；接收响应丢失、消费者重启、回报重试不重复业务副作用。
 - [ ] `R7-012` Queue 模式的暂停、在途消息、DLQ 和回滚切换完成演练，不把已入队消息当作已撤销。
