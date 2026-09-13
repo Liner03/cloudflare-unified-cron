@@ -45,6 +45,23 @@ SDK 提供 `createTriggerConsumer` 与 `reportTriggerResult`。消费者固定 `
 
 结果回报 origin 由网站配置，不从收到的消息读取任意 URL。每条消息携带的回报凭据只用于自己的 Delivery。回报暂时失败会按消费者重试设置再次取缓存结果上报；永久失败进入 DLQ 后可重放缓存结果，不能重做已完成业务。
 
+同一 Cloudflare Account 内，网站 Worker 必须配置指向 Platform 的 `CRON_PLATFORM` Service Binding，并把该 binding 的 `fetch()` 传给 `reportTriggerResult`。不要把公开 `workers.dev` 回调作为默认传输；Service Binding 不经过公网路由，仍由每条消息的专用 `ucrr_` capability 完成应用层授权。
+
+```jsonc
+"services": [
+  {
+    "binding": "CRON_PLATFORM",
+    "service": "unified-cron-platform"
+  }
+]
+```
+
+```ts
+reportTriggerResult(origin, job, result, (input, init) =>
+  env.CRON_PLATFORM.fetch(input, init),
+);
+```
+
 ## 调度容量与运行状态
 
 控制台“调度设置 → 触发容量”可调整规则数、物化预算、Queue 投递预算、RPC 次数/并发以及单站批量。配置以 D1 为准，更新使用 If-Match 与 Idempotency-Key。默认 100 条规则不等于免费承诺每分钟执行 100 次。

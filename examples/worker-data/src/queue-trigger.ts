@@ -58,6 +58,7 @@ export function consumeTriggers(batch: MessageBatch<unknown>, env: Env) {
         new URL(runtime.PLATFORM_REGISTRATION_URL).origin,
         job,
         result,
+        (input, init) => runtime.CRON_PLATFORM.fetch(input, init),
       ),
   })(batch, env);
 }

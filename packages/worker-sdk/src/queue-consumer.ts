@@ -34,8 +34,10 @@ export function createTriggerConsumer<Env>(options: {
           while (index < batch.messages.length) {
             const message = batch.messages[index++];
             if (!message) return;
+            let deliveryId: string | null = null;
             try {
               const job = triggerMessageSchema.parse(message.body);
+              deliveryId = job.deliveryId;
               if (job.targetId !== options.targetId)
                 throw new Error("TRIGGER_TARGET_MISMATCH");
               const result = triggerResultSchema.parse(
@@ -43,14 +45,43 @@ export function createTriggerConsumer<Env>(options: {
               );
               if (options.report) await options.report(job, result, env);
               message.ack();
-            } catch {
+            } catch (error) {
               // Never log the body: it includes a per-delivery receipt capability.
+              console.error(
+                JSON.stringify({
+                  event: "trigger_consumer_failed",
+                  targetId: options.targetId,
+                  queueName: batch.queue,
+                  deliveryId,
+                  ...safeConsumerError(error),
+                }),
+              );
               message.retry({ delaySeconds: 60 });
             }
           }
         },
       ),
     );
+  };
+}
+
+function safeConsumerError(error: unknown): {
+  errorName: string;
+  errorMessage: string;
+} {
+  if (!(error instanceof Error))
+    return { errorName: "UnknownError", errorMessage: "Unknown error" };
+  if (error.name === "ZodError")
+    return {
+      errorName: "ZodError",
+      errorMessage: "Trigger message or result validation failed",
+    };
+  return {
+    errorName: error.name.slice(0, 80),
+    errorMessage: error.message
+      .replace(/\b(?:ucrt|ucrr|ucas)_[A-Za-z0-9_-]+\b/g, "[REDACTED]")
+      .replace(/\bBearer\s+\S+/gi, "Bearer [REDACTED]")
+      .slice(0, 256),
   };
 }
 

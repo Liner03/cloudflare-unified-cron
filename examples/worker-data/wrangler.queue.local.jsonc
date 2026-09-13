@@ -23,6 +23,12 @@
       },
     ],
   },
+  "services": [
+    {
+      "binding": "CRON_PLATFORM",
+      "service": "unified-cron-platform-local",
+    },
+  ],
   "vars": {
     "APP_ENV": "test",
     "TARGET_ID": "DATA",

@@ -4,7 +4,7 @@ import {
   createExecutionContext,
   getQueueResult,
 } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createTriggerConsumer } from "@unified-cron/worker-sdk";
 import type { TriggerMessage } from "@unified-cron/contracts";
@@ -44,6 +44,7 @@ describe("L2-027 website Queue execution", () => {
   });
 
   it("deduplicates concurrent deliveries and caches results when callback fails", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
     await env.BUSINESS_DB.batch([
       env.BUSINESS_DB.prepare("DELETE FROM queue_trigger_effects"),
       env.BUSINESS_DB.prepare("DELETE FROM queue_trigger_results"),
@@ -93,6 +94,13 @@ describe("L2-027 website Queue execution", () => {
         ).first<{ n: number }>()
       )?.n,
     ).toBe(1);
+    expect(errorLog).toHaveBeenCalledWith(
+      expect.stringContaining('"event":"trigger_consumer_failed"'),
+    );
+    expect(errorLog.mock.calls.flat().join(" ")).not.toContain(
+      job.receiptToken,
+    );
+    errorLog.mockRestore();
   });
   it("rejects a cross-site message without executing business", async () => {
     let executed = 0;

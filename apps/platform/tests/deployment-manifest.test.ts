@@ -56,6 +56,9 @@ describe("deployment manifest", () => {
         queues: z.object({
           consumers: z.array(z.object({ queue: z.string() })).length(1),
         }),
+        services: z.array(
+          z.object({ binding: z.string(), service: z.string() }),
+        ),
         vars: z.object({ TRIGGER_QUEUE_NAME: z.string() }),
       })
       .parse(JSON.parse(source.replace(/,\s*([}\]])/g, "$1")));
@@ -63,6 +66,10 @@ describe("deployment manifest", () => {
     expect(config.vars.TRIGGER_QUEUE_NAME).toBe(
       config.queues.consumers[0]?.queue,
     );
+    expect(config.services).toContainEqual({
+      binding: "CRON_PLATFORM",
+      service: "unified-cron-platform-local",
+    });
   });
 
   it("keeps the idempotent SQL sync aligned with target ids and revisions", () => {
