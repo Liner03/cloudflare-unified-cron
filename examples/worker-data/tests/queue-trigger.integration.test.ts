@@ -23,6 +23,26 @@ const job: TriggerMessage = {
   receiptToken: `ucrr_${"t".repeat(43)}`,
 };
 describe("L2-027 website Queue execution", () => {
+  it("rejects a delivery when the runtime Queue name differs from configuration", async () => {
+    let executed = 0;
+    const consumer = createTriggerConsumer({
+      targetId: "DATA",
+      queueName: "configured-queue",
+      execute: () => {
+        executed++;
+        return Promise.resolve({ status: "succeeded", summary: "ok" });
+      },
+    });
+    const batch = createMessageBatch("actual-queue", [
+      { id: "wrong-queue", timestamp: new Date(), body: job, attempts: 1 },
+    ]);
+
+    await expect(consumer(batch, {})).rejects.toThrow(
+      "UNEXPECTED_TRIGGER_QUEUE",
+    );
+    expect(executed).toBe(0);
+  });
+
   it("deduplicates concurrent deliveries and caches results when callback fails", async () => {
     await env.BUSINESS_DB.batch([
       env.BUSINESS_DB.prepare("DELETE FROM queue_trigger_effects"),

@@ -43,6 +43,28 @@ describe("deployment manifest", () => {
     }
   });
 
+  it("keeps the Queue consumer guard equal to the actual configured Queue", () => {
+    const source = readFileSync(
+      new URL(
+        "../../../examples/worker-data/wrangler.queue.local.jsonc",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const config = z
+      .object({
+        queues: z.object({
+          consumers: z.array(z.object({ queue: z.string() })).length(1),
+        }),
+        vars: z.object({ TRIGGER_QUEUE_NAME: z.string() }),
+      })
+      .parse(JSON.parse(source.replace(/,\s*([}\]])/g, "$1")));
+
+    expect(config.vars.TRIGGER_QUEUE_NAME).toBe(
+      config.queues.consumers[0]?.queue,
+    );
+  });
+
   it("keeps the idempotent SQL sync aligned with target ids and revisions", () => {
     const sql = readFileSync(
       new URL("../seed/targets.sql", import.meta.url),
