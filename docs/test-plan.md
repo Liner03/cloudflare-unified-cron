@@ -314,3 +314,4 @@ P0/P1 出现后停止后续破坏性或长时间阶段，保留现场并先修�
 - 原始文档基线：`bb612a8`（发布 `/llms.txt`）；原 RPC 版本测试证据与 Staging 清理见 2026-09-10/11 的 test-runs。
 - 最新触发架构实现：`abee082a8990afdea90f4f7878e8fb5fefbef48f`；三 Target 部署配置修复：`8941a6d1f9dcc1b81fc1e9d2ef1a7a64fe7219b9`。本地 `pnpm verify` 已通过 179 项，追加 L2-023..031 的证据见 `test-runs/2026-09-12-local.md`。
 - 新 Queue 架构已部署到隔离 Staging，Registration、三 Target Service Binding/Queue 配置和安全边界已通过；但唯一原生 Cron 超过官方传播窗口仍未产生 Tick。`R3-002` FAIL，依赖的真实执行、容量和 Soak 项未 PASS，证据见 `test-runs/2026-09-12-staging.md`。旧远程 PASS 不得沿用。
+- 2026-09-13 纠正结论：Canary 与 Platform 均收到真实 Cron；根因是 Queue 名守卫配置错误和 Workers 不支持 `redirect="error"`。最终提交 `a239b02d6872f1314e23c797b88f120ca0f56a3f` 已通过本地 182 项及远程 10/25/50/100 三 Target 矩阵。`R3-009`、`R7-011` 精确响应丢失子项、`R7-012` rollback 仍未 PASS，见 `test-runs/2026-09-13-staging.md`。

@@ -1,5 +1,17 @@
 # Validation Report
 
+## 最新：2026-09-13 Queue 真实闭环与容量
+
+最终 Target/SDK 提交：`a239b02d6872f1314e23c797b88f120ca0f56a3f`；Platform build：`8941a6d1f9dcc1b81fc1e9d2ef1a7a64fe7219b9`。本地完整门禁通过 182 项。
+
+最小 Canary 和 Platform 均收到真实 Cloudflare Cron，纠正了上一轮“Cloudflare 未投递”的过早推断。真正缺陷有两项：Staging 的 `TRIGGER_QUEUE_NAME` 与实际 Queue 名不一致；Workers Runtime 不支持结果回报使用 `redirect: "error"`。最终方案保留 Queue 独立执行，并通过 Target → Platform 的私有 `CRON_PLATFORM` Service Binding 回报结果，使用 `redirect: "manual"` 禁止跟随重定向。安全错误日志会脱敏并限制长度，不记录消息正文或回报 capability。
+
+真实容量矩阵通过：10、25、50、100 条同分钟 occurrence 全部在 DATA_A/B/C 三个真实 Worker 上业务成功，最终每条 attempts=1，最新 100 条的 Delivery/幂等结果/业务副作用为 100/100/100。25 档验证了有界积压由后续 Tick 清空；50 和 100 档无最终 pending。平台当前暂停，100 条规则已改为未来年度时间，不会继续产生分钟流量。
+
+免费边界必须如实区分：100 条逻辑规则已经通过，但 Free 账号总共最多 100 个 Worker，因此“一个 Platform + 100 个网站 Worker”本身超过上限；正常 100 消息/min 约需 432,000 Queue operations/day，是 Free 10,000/day 的 43.2 倍。该架构可替代多个原生 Cron Trigger，尤其适合大量但稀疏的规则；不能宣称 Free 下持续 100/min 或无限网站完全无配额。
+
+尚未完成：修复后的连续 60 分钟 Soak、远程精确“回报响应丢失”注入、正式 rollback 切换。因此不是最终全计划 PASS。逐项证据见 [2026-09-13 Staging 记录](test-runs/2026-09-13-staging.md)。
+
 ## 最新：2026-09-12 Queue 架构 Staging 联调
 
 部署提交：`8941a6d1f9dcc1b81fc1e9d2ef1a7a64fe7219b9`。在已确认的独立测试账号中创建并部署一个 Platform Worker、三个真实 Test Target Worker、两个专用 D1、三组 Queue/DLQ、对应 Service Bindings，以及唯一一个原生 `* * * * *` Cron Trigger。全部资源使用 `unified-cron-*` 名称；未读取或修改其他项目资源。
