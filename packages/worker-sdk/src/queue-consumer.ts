@@ -114,7 +114,9 @@ export async function reportTriggerResult(
       },
       body: JSON.stringify(triggerResultSchema.parse(result)),
       signal: AbortSignal.timeout(10000),
-      redirect: "error",
+      // Workers does not implement redirect="error". Manual preserves the
+      // no-follow security boundary; the non-2xx check below rejects 3xx.
+      redirect: "manual",
     },
   );
   await response.body?.cancel();

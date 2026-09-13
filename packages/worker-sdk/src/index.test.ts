@@ -7,6 +7,7 @@ import {
   createCronHandler,
   createRegistrationClient,
   defineAction,
+  reportTriggerResult,
 } from "./index";
 
 const baseRequest = {
@@ -28,6 +29,33 @@ const baseRequest = {
 };
 
 describe("worker sdk", () => {
+  it("reports Queue results without following redirects at the edge", async () => {
+    const fetcher = vi.fn<typeof fetch>(() =>
+      Promise.resolve(new Response(null, { status: 302 })),
+    );
+
+    await expect(
+      reportTriggerResult(
+        "https://cron.example.com",
+        {
+          protocolVersion: 2,
+          deliveryId: "00000000-0000-4000-8000-000000000001",
+          scheduleId: "schedule-1",
+          targetId: "DATA",
+          scheduledFor: "2026-09-13T00:00:00.000Z",
+          action: "sync",
+          actionVersion: 1,
+          payload: {},
+          idempotencyKey: "queue-report-test",
+          receiptToken: `ucrr_${"r".repeat(43)}`,
+        },
+        { status: "succeeded", summary: "done" },
+        fetcher,
+      ),
+    ).rejects.toThrow("RESULT_REPORT_FAILED:302");
+    expect(fetcher.mock.calls[0]?.[1]?.redirect).toBe("manual");
+  });
+
   it("publishes a complete registration with a scoped bearer token", async () => {
     const fetcher = vi.fn<typeof fetch>(() =>
       Promise.resolve(
