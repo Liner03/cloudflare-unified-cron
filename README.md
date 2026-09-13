@@ -4,6 +4,16 @@
 
 默认支持配置 100 条规则，容量、投递批量和 RPC 并发可在控制台调整。已有 DATA Target 保留 RPC；独立执行模式按 [Queue 接入指南](docs/queue-worker-integration.md) 显式配置。真实 Cloudflare 已通过 10/25/50/100 同分钟负载；Free Queue 约等于每天 3,333 次正常任务，不是每分钟只能执行 2 次。
 
+说人话的 Free Queue 预算（按一条成功任务约消耗写入、读取、删除 3 次 operation 估算）：
+
+- 一天大约能触发 3,333 次；这是全天总量，不是每分钟限速。
+- 100 个网站每天各触发 1 次：约 300 operations/day，只用 3%。
+- 100 个网站每小时各触发 1 次：约 7,200 operations/day，用 72%，通常能放进 Free，但还要给失败重试留余量。
+- 100 个网站每 10 分钟各触发 1 次：约 43,200 operations/day，Free 不够。
+- 100 个网站每分钟各触发 1 次：约 432,000 operations/day，是 Free 额度的 43.2 倍。
+
+因此平台可以在某一分钟一次性触发 100 条；真正的免费限制是一天累计触发多少次。网站 Worker 收到触发后的业务执行，还会另算 Workers 自身额度。详见 Cloudflare 的 [Queues 计费](https://developers.cloudflare.com/queues/platform/pricing/) 与 [Workers 限额](https://developers.cloudflare.com/workers/platform/limits/)。
+
 ## 架构边界
 
 ```text

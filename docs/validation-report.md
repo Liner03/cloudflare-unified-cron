@@ -1,14 +1,14 @@
 # Validation Report
 
-## 最新：2026-09-13 Queue 真实闭环与容量
+## 最新：2026-09-13 共享 Queue 真实闭环与容量
 
-最终 Target/SDK 提交：`a239b02d6872f1314e23c797b88f120ca0f56a3f`；Platform build：`8941a6d1f9dcc1b81fc1e9d2ef1a7a64fe7219b9`。本地完整门禁通过 182 项。
+当前实现与远端 Platform/Target build：`3108339ac10ee3956041136e2d63986491af5bfa`。本地完整门禁通过 186 项。该提交已在远端 `main`。
 
-最小 Canary 和 Platform 均收到真实 Cloudflare Cron，纠正了上一轮“Cloudflare 未投递”的过早推断。真正缺陷有两项：Staging 的 `TRIGGER_QUEUE_NAME` 与实际 Queue 名不一致；Workers Runtime 不支持结果回报使用 `redirect: "error"`。最终方案保留 Queue 独立执行，并通过 Target → Platform 的私有 `CRON_PLATFORM` Service Binding 回报结果，使用 `redirect: "manual"` 禁止跟随重定向。安全错误日志会脱敏并限制长度，不记录消息正文或回报 capability。
+架构已经改成一个共享 Dispatch Queue：Platform 的 `scheduled()` 只负责 D1 物化和入队；Platform 的独立 `queue()` invocation 以 `max_batch_size=1` 逐条消费，再通过白名单 Service Binding 调用对应网站的 `CronEntrypoint.cron()`，并直接把结果写回 Platform D1。网站 Worker 不再需要自己的 Queue consumer，也不再需要反向绑定 Platform。远端配置确认共享 Queue 只有一个 Producer 和一个 Consumer，均为 `unified-cron-platform-test`。
 
-真实容量矩阵通过：10、25、50、100 条同分钟 occurrence 全部在 DATA_A/B/C 三个真实 Worker 上业务成功，最终每条 attempts=1，最新 100 条的 Delivery/幂等结果/业务副作用为 100/100/100。25 档验证了有界积压由后续 Tick 清空；50 和 100 档无最终 pending。平台当前暂停，100 条规则已改为未来年度时间，不会继续产生分钟流量。
+新共享架构重新完成真实 10、25、50、100 同分钟矩阵：4/3/3、9/8/8、17/17/16、34/33/33 分发到 DATA_A/B/C，185/185 全部首次消费成功；目标 D1 为 185 条唯一结果和 185 次唯一副作用。矩阵窗口 433 次 Worker invocation、0 错误；最长一档 100 条从计划时间到结果落库最多 53.0 秒。平台当前暂停，100 条规则已改为未来年度时间，不会继续产生分钟流量。旧的三组 Target Queue/DLQ 已解除遗留 Consumer 后永久删除，只保留正在使用的一组共享 Queue/DLQ。
 
-免费边界必须如实区分：100 条逻辑规则已经通过，但 Free 账号总共最多 100 个 Worker，因此“一个 Platform + 100 个网站 Worker”本身超过上限；正常 100 消息/min 约需 432,000 Queue operations/day，是 Free 10,000/day 的 43.2 倍。该架构可替代多个原生 Cron Trigger，尤其适合大量但稀疏的规则；不能宣称 Free 下持续 100/min 或无限网站完全无配额。
+免费边界用任务数理解最直观：一条正常成功任务约用 3 次 Queue operation，因此 Free 的 10,000 operations/day 约等于 3,333 次触发/day。100 个网站每天一次约用 300（3%）；每小时一次约用 7,200（72%）；每 10 分钟一次约用 43,200（Free 不够）；每分钟一次约用 432,000（Free 的 43.2 倍）。这不是“每分钟最多两个”，100 条同分钟突发已经实测成功；限制的是全天累计用量。网站业务执行另算 Workers 自身额度。
 
 尚未完成：修复后的连续 60 分钟 Soak、远程精确“回报响应丢失”注入、正式 rollback 切换。因此不是最终全计划 PASS。逐项证据见 [2026-09-13 Staging 记录](test-runs/2026-09-13-staging.md)。
 
