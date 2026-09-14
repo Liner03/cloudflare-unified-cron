@@ -27,6 +27,20 @@ export async function executeQueueProbeCron(
   const request = cronRequestV1Schema.parse(input);
   if (request.targetId !== env.TARGET_ID)
     throw new Error("TRIGGER_TARGET_MISMATCH");
+  const failureMode = testFailureMode(request.payload);
+  if (failureMode && !["test", "staging"].includes(env.APP_ENV)) {
+    return {
+      protocolVersion: 1,
+      executionId: request.executionId,
+      attemptId: request.attemptId,
+      ok: false,
+      error: {
+        code: "TEST_MODE_FORBIDDEN",
+        message: "Test failure injection is unavailable",
+        retryable: false,
+      },
+    };
+  }
   const result = await executeQueueProbe(
     {
       protocolVersion: 2,
@@ -42,6 +56,12 @@ export async function executeQueueProbeCron(
     },
     env,
   );
+  if (
+    failureMode === "response_loss_always" ||
+    (failureMode === "response_loss_once" && request.attemptNumber === 1)
+  ) {
+    throw new Error("TEST_RESPONSE_LOSS_AFTER_EFFECT");
+  }
   return result.status === "succeeded"
     ? {
         protocolVersion: 1,
@@ -62,6 +82,17 @@ export async function executeQueueProbeCron(
           retryable: false,
         },
       };
+}
+
+function testFailureMode(
+  payload: unknown,
+): "response_loss_once" | "response_loss_always" | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload))
+    return null;
+  const value: unknown = (payload as Record<string, unknown>).testFailureMode;
+  return value === "response_loss_once" || value === "response_loss_always"
+    ? value
+    : null;
 }
 export function publishQueueRegistration(env: Env) {
   return createRegistrationClient({

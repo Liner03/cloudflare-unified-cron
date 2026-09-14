@@ -52,6 +52,101 @@ describe("L2-027 website Queue execution", () => {
     });
   });
 
+  it("replays a committed result after one injected response loss without another effect", async () => {
+    await env.BUSINESS_DB.batch([
+      env.BUSINESS_DB.prepare("DELETE FROM queue_trigger_effects"),
+      env.BUSINESS_DB.prepare("DELETE FROM queue_trigger_results"),
+    ]);
+    const request = {
+      protocolVersion: 1,
+      executionId: "response-loss-once",
+      attemptId: "attempt-1",
+      scheduleId: "shared-schedule",
+      targetId: "DATA",
+      action: "queueProbe",
+      actionVersion: 1,
+      source: "cron",
+      dispatchReason: "initial",
+      attemptNumber: 1,
+      scheduledFor: "2026-09-14T00:00:00.000Z",
+      requestedAt: new Date().toISOString(),
+      deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+      idempotencyKey: "response-loss-once-key",
+      payload: { testFailureMode: "response_loss_once" },
+    };
+    await expect(executeQueueProbeCron(request, env)).rejects.toThrow(
+      "TEST_RESPONSE_LOSS_AFTER_EFFECT",
+    );
+    const replay = await executeQueueProbeCron(
+      {
+        ...request,
+        attemptId: "attempt-2",
+        dispatchReason: "automatic_retry",
+        attemptNumber: 2,
+      },
+      env,
+    );
+    expect(replay).toMatchObject({ ok: true, attemptId: "attempt-2" });
+    const counts = await env.BUSINESS_DB.prepare(
+      `SELECT
+        (SELECT count(*) FROM queue_trigger_results) results,
+        (SELECT count(*) FROM queue_trigger_effects) effects`,
+    ).first<{ results: number; effects: number }>();
+    expect(counts).toEqual({ results: 1, effects: 1 });
+  });
+
+  it("keeps one effect when every response is lost and forbids injection in production", async () => {
+    await env.BUSINESS_DB.batch([
+      env.BUSINESS_DB.prepare("DELETE FROM queue_trigger_effects"),
+      env.BUSINESS_DB.prepare("DELETE FROM queue_trigger_results"),
+    ]);
+    const request = {
+      protocolVersion: 1,
+      executionId: "response-loss-always",
+      attemptId: "attempt-1",
+      scheduleId: "shared-schedule",
+      targetId: "DATA",
+      action: "queueProbe",
+      actionVersion: 1,
+      source: "cron",
+      dispatchReason: "initial",
+      attemptNumber: 1,
+      scheduledFor: "2026-09-14T00:00:00.000Z",
+      requestedAt: new Date().toISOString(),
+      deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+      idempotencyKey: "response-loss-always-key",
+      payload: { testFailureMode: "response_loss_always" },
+    };
+    for (const attemptNumber of [1, 2, 3, 4]) {
+      await expect(
+        executeQueueProbeCron(
+          {
+            ...request,
+            attemptId: `attempt-${attemptNumber}`,
+            dispatchReason: attemptNumber === 1 ? "initial" : "automatic_retry",
+            attemptNumber,
+          },
+          env,
+        ),
+      ).rejects.toThrow("TEST_RESPONSE_LOSS_AFTER_EFFECT");
+    }
+    expect(
+      await env.BUSINESS_DB.prepare(
+        "SELECT count(*) effects FROM queue_trigger_effects",
+      ).first<{ effects: number }>(),
+    ).toEqual({ effects: 1 });
+    const production = await executeQueueProbeCron(request, {
+      APP_ENV: "production",
+      TARGET_ID: env.TARGET_ID,
+      BUILD_ID: env.BUILD_ID,
+      BUSINESS_DB: env.BUSINESS_DB,
+    } as Env);
+    expect(production).toMatchObject({
+      ok: false,
+      error: { code: "TEST_MODE_FORBIDDEN", retryable: false },
+    });
+  });
+
   it("rejects a delivery when the runtime Queue name differs from configuration", async () => {
     let executed = 0;
     const consumer = createTriggerConsumer({
