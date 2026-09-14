@@ -1,5 +1,21 @@
 # Validation Report
 
+## 最新：2026-09-14 共享 Queue 500 Target 本地容量修复
+
+实现提交：`9bb9bec7af05532d69e5e5b63fa49400476b9090`。完整 `pnpm verify` 退出 0，共 189 项自动化测试通过。
+
+共享 Queue producer 不再逐 Target 执行 D1 claim 和 Queue send；它现在跨全部 Queue Target 全局领取，并按 Cloudflare 每批最多 100 条的边界发送。新安装的总规则、每 Tick 物化和每 Tick 投递默认值均为 1,000，共享 Queue claim/send 批量默认值为 100。
+
+本地 `L2-032` 已验证 250/500 条同分钟到期；500 个不同 Target 恰好使用 5 个 Queue batch，全部一次物化和入队，立即重复 Tick 不产生重复 occurrence。两秒慢 Target 不保持 Platform Tick，也不阻塞先到的 Target。Platform 类型检查、38 个单元测试和 69 个 workerd/D1/Queue/RPC 集成测试通过。
+
+这不是远程 PASS。`R7-013` 仍需在隔离 Staging 对 250/500 做真实 Cloudflare 验证并记录时延、CPU、D1 和 Queue 用量；在此之前，远程已证明的最大同分钟负载仍是 100。证据见 [2026-09-14 本地记录](test-runs/2026-09-14-local.md)。
+
+### 距离正式替代 Cloudflare Trigger 还剩什么
+
+平台核心触发链已经可用，但正式结论仍缺三组证据：第一，提交、部署并远程验证本次 1,000 规则/500 occurrence 容量修复；第二，在当前共享 Queue 版本完成 60 分钟真实 Cron soak（包含 Registration 更新和暂停/恢复）、精确响应丢失、在途消息/DLQ、正式回滚和最终测试资源处理；第三，为 mkfast 增加非公网 `CronEntrypoint`，处理当前 30 秒期限与 maintenance 批量边界，并实测从 Platform 到 mkfast D1/DO/Workflow 的成功、重复、部分失败、重试和切换回退。详细唯一清单是 `R3-009`、`R7-006..007`、`R7-011..013`、`R8-001..009` 和 `R9-001..005`。
+
+以下条件是产品边界，不会被测试“消除”：网站 Worker 必须与 Platform 位于同一 Cloudflare Account；精度为分钟级；新增网站需要 allowlist + Service Binding 部署；Cloudflare 套餐额度继续生效。
+
 ## 最新：2026-09-13 共享 Queue 真实闭环与容量
 
 当前实现与远端 Platform/Target build：`3108339ac10ee3956041136e2d63986491af5bfa`。本地完整门禁通过 186 项。该提交已在远端 `main`。
