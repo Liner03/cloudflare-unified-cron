@@ -4,6 +4,10 @@
 
 实现提交：`9bb9bec7af05532d69e5e5b63fa49400476b9090`。完整 `pnpm verify` 退出 0，共 189 项自动化测试通过。
 
+2026-09-14 远程补充已经完成最初列出的五组上线前测试：容量 migration/部署回归通过；真实 250/500 同分钟容量通过；60/60 连续分钟 Tick 跨 UTC 整点通过；业务提交后响应丢失重投与 DLQ 均未重复副作用；旧版回滚和当前版恢复各自通过真实 Cron 与成功路径。Target 故障注入提交 `e8f8f16d6caba7c71e6e41238358437cfb38e869` 的完整本地门禁为 191 项通过。
+
+当前 Platform 已恢复 build `42fca1f9026d5430368275ebd2464e2664f695d6`，全局暂停，测试规则指向未来时间，主 Queue/DLQ backlog 均为 0。详细证据见 [2026-09-14 Staging 记录](test-runs/2026-09-14-staging.md)。下一阶段是删除已完成使命的 A/B/C Test Target，然后在 mkfast 独立分支完成 `R9-001..005`；Platform、共享 Queue 和 Platform D1 仍需保留用于 mkfast 调用链。
+
 共享 Queue producer 不再逐 Target 执行 D1 claim 和 Queue send；它现在跨全部 Queue Target 全局领取，并按 Cloudflare 每批最多 100 条的边界发送。新安装的总规则、每 Tick 物化和每 Tick 投递默认值均为 1,000，共享 Queue claim/send 批量默认值为 100。
 
 本地 `L2-032` 已验证 250/500 条同分钟到期；500 个不同 Target 恰好使用 5 个 Queue batch，全部一次物化和入队，立即重复 Tick 不产生重复 occurrence。两秒慢 Target 不保持 Platform Tick，也不阻塞先到的 Target。Platform 类型检查、38 个单元测试和 69 个 workerd/D1/Queue/RPC 集成测试通过。
