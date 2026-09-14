@@ -1,5 +1,15 @@
 # Validation Report
 
+## 最新：2026-09-14 mkfast 模板真实接入
+
+mkfast 在未合并的独立分支 `test/unified-cron-integration`、提交 `311d6b397219dbb61ff25e17ff4b943e93d7f10e` 完成接入。生产 `wrangler.jsonc` 未改动；测试部署使用独立 D1、Workflow、两个 Durable Object 类和无公网执行路由的命名 `CronEntrypoint`。Platform 使用当前提交 `272d7d948db07e7103b5d0a69aa4977fc0feb0bf`，Queue Target deadline 为 14 分钟。
+
+`R9-001..004` PASS：私有 Service Binding `describe()` 与 Registration 一致；积分过期和 AI reconciliation 全部等待；部分失败不伪装成功；同一 Queue 投递重试后没有重复积分过期或退款；真实链路经过 Platform Cron、共享 Queue、Service Binding、mkfast Entrypoint、mkfast D1、积分协调 DO 和 Workflow 状态查询。测试积分最终仅有一条 `-10` 过期流水，Workflow 探针得到预期 `workflow_enqueue_failed`，重复退款为零。
+
+`R9-005` 的严格“双 Trigger 同时常驻影子”由用户批准 `SKIPPED`：该 Free Account 已占满 5 个 Cron Trigger，Cloudflare 以 10072 拒绝第 6 个，且测试不得删除其他项目资源。替代的顺序切换验收已通过：标准完整部署的 mkfast 原生 Cron 在 `2026-09-14T07:57:18Z` 收到真实 scheduled 事件且 outcome=ok；切回后 Platform 在 08:07Z 完成真实外置投递；切换窗口一笔 7 积分只产生一条 `-7` 过期流水。最终状态为 Platform Trigger=1、mkfast Trigger=0、Platform 全局暂停、mkfast 外置日程暂停、R9 Registration Token 已撤销。
+
+因此当前证据支持：mkfast 的业务 Cron 可以由统一平台替代，分钟调度、重试和业务幂等链路可用。唯一未实测的是在这个已满额免费账号里让原生与外置两个 Trigger 长时间同时运行；这是账号名额造成的明确 SKIPPED，不是外置调用链失败。逐项证据见 [2026-09-14 Staging 记录](test-runs/2026-09-14-staging.md)。
+
 ## 最新：2026-09-14 共享 Queue 500 Target 本地容量修复
 
 实现提交：`9bb9bec7af05532d69e5e5b63fa49400476b9090`。完整 `pnpm verify` 退出 0，共 189 项自动化测试通过。
