@@ -72,6 +72,8 @@ Platform 的 Wrangler 配置同时把同一 Queue 配为 producer 和 consumer�
 
 Platform consumer 会把 Queue message 转成 `CronRequestV1`。`executionId` 等于 Delivery ID；每次基础设施重试生成新的 `attemptId`，但 `idempotencyKey` 保持不变。网站必须按该 key 原子保存业务副作用和结果，重试时返回已保存结果并包装当前 Attempt identity。
 
+共享 Queue Target 的 RPC `deadlineAt` 固定为调用开始后 14 分钟，为 Cloudflare Queue consumer 的 15 分钟 wall-clock 上限保留 1 分钟结果落库余量。Schedule 的 `timeoutMs` 仍用于兼容直连 RPC，默认和上限保持 30 秒；两种执行模式不会互相借用错误的期限。
+
 显式业务失败会记录为 failed 并确认 Queue message；抛出异常、RPC 中断或结果协议错误会重试相同 Delivery。安全日志只记录脱敏后的错误摘要，不记录 Queue message、Registration Token 或 `ucrr_` capability。
 
 旧的“网站直接消费专属 Queue”SDK 仍保留用于兼容，但不再是默认部署架构。

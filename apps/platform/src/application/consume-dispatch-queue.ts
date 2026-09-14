@@ -8,6 +8,8 @@ import { TriggerDeliveryRepository } from "../infrastructure/d1/trigger-delivery
 import { ServiceBindingAdapter } from "../infrastructure/rpc/service-binding-adapter";
 import { getTargetManifest } from "../targets.manifest";
 
+export const QUEUE_TARGET_DEADLINE_MS = 14 * 60_000;
+
 export async function consumeDispatchQueue(
   batch: MessageBatch<unknown>,
   env: Env,
@@ -77,7 +79,7 @@ export function toCronRequest(
     attemptNumber,
     scheduledFor: job.scheduledFor,
     requestedAt: new Date(now).toISOString(),
-    deadlineAt: new Date(now + 30_000).toISOString(),
+    deadlineAt: new Date(now + QUEUE_TARGET_DEADLINE_MS).toISOString(),
     idempotencyKey: job.idempotencyKey,
     payload: job.payload,
   };

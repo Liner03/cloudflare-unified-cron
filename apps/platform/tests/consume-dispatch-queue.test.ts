@@ -29,7 +29,8 @@ describe("shared dispatch Queue", () => {
   });
 
   it("maps one delivery to one retry-safe RPC request", () => {
-    expect(toCronRequest(job, "attempt-2", 2)).toMatchObject({
+    const request = toCronRequest(job, "attempt-2", 2);
+    expect(request).toMatchObject({
       executionId: job.deliveryId,
       attemptId: "attempt-2",
       targetId: "DATA_A",
@@ -37,6 +38,9 @@ describe("shared dispatch Queue", () => {
       attemptNumber: 2,
       idempotencyKey: "shared-dispatch-test",
     });
+    expect(
+      Date.parse(request.deadlineAt) - Date.parse(request.requestedAt),
+    ).toBe(14 * 60_000);
   });
 
   it("maps RPC terminal results without inventing success", () => {

@@ -20,6 +20,9 @@ Website Workers no longer need Queue consumers, reverse Platform bindings or pub
 
 - One Cron, one Queue and one DLQ serve all logical schedules.
 - Queue invocations, not the Cron invocation, contain website latency.
+- Queue Target RPC receives a 14-minute deadline, leaving one minute inside
+  Cloudflare's 15-minute Queue consumer wall limit for result persistence.
+  Legacy direct RPC retains its shorter schedule timeout.
 - Batch size one provides fault and latency isolation; Cloudflare controls consumer concurrency.
 - Producer-side claiming is global across all Queue Targets. It sends at most
   100 messages per `sendBatch` call, so 500 same-minute Targets require five
