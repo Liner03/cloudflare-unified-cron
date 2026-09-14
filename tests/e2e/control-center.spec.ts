@@ -47,9 +47,11 @@ test("shows configurable scheduler budgets from the real API", async ({
   await expect(
     page.getByRole("heading", { name: "触发容量", exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("规则总数", { exact: true })).toHaveValue("100");
+  await expect(page.getByLabel("规则总数", { exact: true })).toHaveValue(
+    "1000",
+  );
   await expect(page.getByLabel("每轮投递任务数", { exact: true })).toHaveValue(
-    "100",
+    "1000",
   );
 });
 

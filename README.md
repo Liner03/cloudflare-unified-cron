@@ -2,7 +2,7 @@
 
 一个部署在单个 Cloudflare Account 内的统一 Cron 触发平台：用一个原生分钟级 Cron Trigger 和一个共享 Dispatch Queue 管理多个网站的逻辑定时规则。Platform 的独立 Queue invocation 通过 Service Binding 调用网站 Worker；同步直连 RPC 作为兼容模式保留。
 
-默认支持配置 100 条规则，容量、投递批量和 RPC 并发可在控制台调整。已有 DATA Target 保留 RPC；独立执行模式按 [Queue 接入指南](docs/queue-worker-integration.md) 显式配置。真实 Cloudflare 已通过 10/25/50/100 同分钟负载；Free Queue 约等于每天 3,333 次正常任务，不是每分钟只能执行 2 次。
+默认支持配置 1,000 条规则，容量、投递批量和 RPC 并发可在控制台调整。共享 Queue 每批最多入队 100 条；500 个不同网站同分钟到期的本地 D1/Queue 测试只需 5 个发送批次。已有 DATA Target 保留 RPC；独立执行模式按 [Queue 接入指南](docs/queue-worker-integration.md) 显式配置。真实 Cloudflare 已通过 10/25/50/100 同分钟负载；250/500 远程验证完成前不得沿用本地结果。Free Queue 约等于每天 3,333 次正常任务，不是每分钟只能执行 2 次。
 
 说人话的 Free Queue 预算（按一条成功任务约消耗写入、读取、删除 3 次 operation 估算）：
 

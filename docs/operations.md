@@ -29,7 +29,7 @@ Execution 保持 running，租约到期后恢复为 unknown 或安全 retry_wait
 
 ### 集中到期
 
-当前预算来自 D1 `scheduler_settings`，控制台可修改。默认每轮最多物化 100 条规则、投递 100 个 Queue 消息或开始 10 个兼容 RPC（RPC 并发 5）。Queue 与 RPC 共享物化预算，RPC 有保留额度。大量整点任务可能产生 dispatch lag，提高配置前应测量 CPU、D1 和 Queue quota。Queue“已入队”不等于业务成功；在“触发记录”查看独立业务回报。
+当前预算来自 D1 `scheduler_settings`，控制台可修改。默认总规则、每轮物化和每轮 Queue 投递上限均为 1,000；共享 Queue 每个 producer batch 最多 100 条；兼容 RPC 每轮最多开始 10 个（并发 5）。Queue 与 RPC 共享物化预算，RPC 有保留额度。超过预算的大量整点任务可能产生 dispatch lag，提高配置前应测量 CPU、D1 和 Queue quota。Queue“已入队”不等于业务成功；在“触发记录”查看独立业务回报。
 
 ## 人工操作
 

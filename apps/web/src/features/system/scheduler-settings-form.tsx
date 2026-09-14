@@ -10,7 +10,7 @@ const fields = [
   ["delivery_budget", "每轮投递任务数", 1, 1000],
   ["rpc_budget", "每轮 RPC 次数", 1, 20],
   ["concurrency", "RPC 并发数", 1, 10],
-  ["per_target_batch", "每网站单批任务数", 1, 100],
+  ["per_target_batch", "共享 Queue 单批任务数", 1, 100],
 ] as const;
 export function SchedulerSettingsForm({
   settings,

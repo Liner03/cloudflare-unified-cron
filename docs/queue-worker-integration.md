@@ -12,6 +12,8 @@ Cloudflare Cron
 
 Queue consumer 的 `max_batch_size` 固定为 `1`。一个慢网站只占用自己的 consumer invocation，不会让同一批次中的其他网站等待。Cron invocation 在可靠入队后结束，网站业务不占用 Cron 的生命周期。
 
+Platform 入队时会跨网站全局领取到期任务，并按 Cloudflare Queue 的 100 条/批限制调用 `sendBatch`。默认一个 Tick 最多物化和投递 1,000 条；例如 500 个网站同分钟到期只需要 5 个 Queue 发送批次，不会逐网站进行 500 次 Queue 调用。
+
 ## 配置 Target
 
 在 `apps/platform/targets.json` 中添加网站。所有 Queue Target 共用相同的 `DISPATCH_QUEUE`：

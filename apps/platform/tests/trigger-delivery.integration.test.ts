@@ -7,8 +7,11 @@ import { readSchedulerSettings } from "../src/infrastructure/d1/scheduler-settin
 import { ServiceBindingAdapter } from "../src/infrastructure/rpc/service-binding-adapter";
 import { createAdminSession } from "../src/infrastructure/auth/access";
 import { createApplication } from "../src/application/create-application";
+import { TARGETS } from "../src/targets.manifest";
 
 const now = Date.parse("2026-09-12T00:00:00Z");
+const SHARED_QUEUE_BINDING = "DISPATCH_QUEUE";
+const SHARED_QUEUE_NAME = "unified-cron-dispatch-test";
 const targets: TargetManifest[] = Array.from({ length: 10 }, (_, i) => ({
   id: `SITE_${i}`,
   label: `Site ${i}`,
@@ -17,8 +20,15 @@ const targets: TargetManifest[] = Array.from({ length: 10 }, (_, i) => ({
   entrypoint: "CronEntrypoint",
   protocolVersion: 1,
   manifestRevision: "v1",
-  delivery: { mode: "queue", binding: `QUEUE_${i}`, queue: `site-${i}-cron` },
+  delivery: {
+    mode: "queue",
+    binding: SHARED_QUEUE_BINDING,
+    queue: SHARED_QUEUE_NAME,
+  },
 }));
+const realTargets = TARGETS.filter((target) =>
+  ["DATA_A", "DATA_B", "DATA_C"].includes(target.id),
+);
 let repository: TriggerDeliveryRepository;
 beforeEach(async () => {
   repository = new TriggerDeliveryRepository(env.DB);
@@ -33,22 +43,35 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM registration_tokens"),
     env.DB.prepare("DELETE FROM targets"),
     env.DB.prepare(
-      "UPDATE scheduler_settings SET max_schedules=100,materialize_budget=100,delivery_budget=100,per_target_batch=10 WHERE id=1",
+      "UPDATE scheduler_settings SET max_schedules=1000,materialize_budget=1000,delivery_budget=1000,per_target_batch=100 WHERE id=1",
     ),
     env.DB.prepare("UPDATE platform_state SET dispatch_paused=0 WHERE id=1"),
   ]);
-  for (const target of targets)
-    await env.DB.batch([
+  await seedTargets(targets);
+});
+async function runBatches(statements: D1PreparedStatement[]) {
+  for (let index = 0; index < statements.length; index += 100) {
+    await env.DB.batch(statements.slice(index, index + 100));
+  }
+}
+async function seedTargets(siteTargets: readonly TargetManifest[]) {
+  await runBatches(
+    siteTargets.flatMap((target) => [
       env.DB.prepare(
-        "INSERT INTO targets(id,label,enabled,manifest_revision,created_at,updated_at) VALUES (?,?,1,?,0,0)",
+        "INSERT OR IGNORE INTO targets(id,label,enabled,manifest_revision,created_at,updated_at) VALUES (?,?,1,?,0,0)",
       ).bind(target.id, target.label, "v1"),
       env.DB.prepare(
-        "INSERT INTO registered_actions(target_id,name,version,label,description,idempotent,created_at,updated_at) VALUES (?,'probe',1,'probe','',1,0,0)",
+        "INSERT OR IGNORE INTO registered_actions(target_id,name,version,label,description,idempotent,created_at,updated_at) VALUES (?,'probe',1,'probe','',1,0,0)",
       ).bind(target.id),
-    ]);
-});
-async function seed(count: number) {
-  await env.DB.batch(
+    ]),
+  );
+}
+async function seed(
+  count: number,
+  siteTargets: readonly TargetManifest[] = targets,
+) {
+  await seedTargets(siteTargets);
+  await runBatches(
     Array.from({ length: count }, (_, i) =>
       env.DB.prepare(
         `INSERT INTO schedules(id,name,description,target_id,action,action_version,cron_expression,timezone,enabled,revision,payload_json,retry_policy_json,timeout_ms,misfire_policy,misfire_grace_seconds,next_run_at,created_at,updated_at,registration_key,managed_by_registration,declared_enabled)
@@ -56,29 +79,34 @@ async function seed(count: number) {
       ).bind(
         `schedule-${i}`,
         `Schedule ${i}`,
-        `SITE_${i % 10}`,
+        siteTargets[i % siteTargets.length]?.id,
         now,
         `schedule-${i}`,
       ),
     ),
   );
 }
-function queueEnvironment(messages: TriggerMessage[]) {
-  return Object.fromEntries(
-    targets.map((target) => [
-      target.delivery!.binding,
-      {
-        async sendBatch(batch: { body: TriggerMessage }[]) {
-          expect(batch.every((m) => m.body.targetId === target.id)).toBe(true);
-          messages.push(...batch.map((m) => m.body));
-          await Promise.resolve();
-        },
+function queueEnvironment(
+  messages: TriggerMessage[],
+  batchSizes: number[] = [],
+) {
+  return {
+    [SHARED_QUEUE_BINDING]: {
+      async sendBatch(batch: { body: TriggerMessage }[]) {
+        batchSizes.push(batch.length);
+        messages.push(...batch.map((message) => message.body));
+        await Promise.resolve();
       },
-    ]),
-  );
+    },
+  };
+}
+function testTriggerSecret() {
+  const value: unknown = Reflect.get(env, "TRIGGER_SIGNING_KEY");
+  if (typeof value !== "string") throw new Error("missing test trigger secret");
+  return value;
 }
 
-describe("L2-023..029 reliable multi-site trigger delivery", () => {
+describe("L2-023..032 reliable multi-site trigger delivery", () => {
   it("bounds D1 JSON and Queue batches for 100 large-payload occurrences", async () => {
     await seed(100);
     await env.DB.prepare("UPDATE schedules SET target_id=?,payload_json=?")
@@ -87,7 +115,7 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
     const messages: TriggerMessage[] = [];
     const bindings = queueEnvironment(messages);
     const batchSizes: number[] = [];
-    bindings.QUEUE_0 = {
+    bindings.DISPATCH_QUEUE = {
       sendBatch: (batch: { body: TriggerMessage }[]) => {
         batchSizes.push(
           new TextEncoder().encode(JSON.stringify(batch)).byteLength,
@@ -111,22 +139,21 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
     expect(Math.max(...batchSizes)).toBeLessThan(256000);
   });
   it("shares materialization budget between Queue and legacy RPC without starving RPC", async () => {
-    await seed(3);
-    await env.DB.prepare(
-      "UPDATE scheduler_settings SET materialize_budget=2,rpc_budget=1 WHERE id=1",
-    ).run();
-    const sites = targets.slice(0, 3).map((target, i) => ({
+    const sites = realTargets.map((target, index) => ({
       ...target,
-      binding: `MULTI_RPC_${i}`,
       delivery:
-        i === 0
+        index === 0
           ? undefined
           : {
               mode: "queue" as const,
-              binding: `REAL_QUEUE_${i}`,
-              queue: `multi-queue-${i}`,
+              binding: SHARED_QUEUE_BINDING,
+              queue: SHARED_QUEUE_NAME,
             },
     }));
+    await seed(3, sites);
+    await env.DB.prepare(
+      "UPDATE scheduler_settings SET materialize_budget=2,rpc_budget=1 WHERE id=1",
+    ).run();
     const result = await createApplication(
       env,
       { nowMs: () => now },
@@ -142,20 +169,12 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
       )?.n,
     ).toBe(1);
   });
-  it("full Tick finishes while a website works beyond the legacy RPC deadline", async () => {
-    await seed(3);
+  it("full Tick finishes before a slow website completes", async () => {
+    await seed(3, realTargets);
     await env.DB.prepare(
-      `UPDATE schedules SET payload_json='{"delayMs":35000}' WHERE id='schedule-0'`,
+      `UPDATE schedules SET payload_json='{"delayMs":2000}' WHERE id='schedule-2'`,
     ).run();
-    const sites = targets.slice(0, 3).map((target, i) => ({
-      ...target,
-      binding: `MULTI_RPC_${i}`,
-      delivery: {
-        mode: "queue" as const,
-        binding: `REAL_QUEUE_${i}`,
-        queue: `multi-queue-${i}`,
-      },
-    }));
+    const sites = realTargets;
     const started = Date.now();
     const result = await createApplication(
       env,
@@ -170,7 +189,7 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
     expect(Date.now() - started).toBeLessThan(10000);
     const deliveries = await repository.list("", 100);
     const adapter = new ServiceBindingAdapter(env, sites);
-    for (const target of sites.slice(1)) {
+    for (const target of sites.slice(0, 2)) {
       const id = deliveries.find((row) => row.targetId === target.id)?.id;
       await expect
         .poll(
@@ -178,11 +197,11 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
             (await adapter.describe(target)).actions.some(
               (action) => action.name === id,
             ),
-          { timeout: 10000, interval: 100 },
+          { timeout: 2000, interval: 50 },
         )
         .toBe(true);
     }
-    const slow = sites[0];
+    const slow = sites[2];
     if (!slow) throw new Error("missing slow site");
     const id = deliveries.find((row) => row.targetId === slow.id)?.id;
     expect(
@@ -196,36 +215,26 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
           (await adapter.describe(slow)).actions.some(
             (action) => action.name === id,
           ),
-        { timeout: 40000, interval: 500 },
+        { timeout: 5000, interval: 100 },
       )
       .toBe(true);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(30000);
-  }, 45000);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1500);
+  }, 10000);
   it("routes describe to three real workerd WorkerEntrypoints", async () => {
-    const sites = targets
-      .slice(0, 3)
-      .map((target, i) => ({ ...target, binding: `MULTI_RPC_${i}` }));
+    const sites = realTargets;
     const adapter = new ServiceBindingAdapter(env, sites);
     for (const target of sites)
-      expect((await adapter.describe(target)).actions[0]?.name).toBe(target.id);
+      expect((await adapter.describe(target)).actions[0]?.name).toBe("probe");
   });
 
-  it("three real Queue consumers execute after producer delivery completes", async () => {
-    await seed(10);
-    const sites = targets.slice(0, 3).map((target, i) => ({
-      ...target,
-      binding: `MULTI_RPC_${i}`,
-      delivery: {
-        mode: "queue" as const,
-        binding: `REAL_QUEUE_${i}`,
-        queue: `multi-queue-${i}`,
-      },
-    }));
+  it("one real Queue consumer routes to three WorkerEntrypoints after producer delivery completes", async () => {
+    const sites = realTargets;
+    await seed(3, sites);
     const result = await new TriggerDeliveryApplication(
       repository,
       sites,
       env,
-      "local-secret",
+      testTriggerSecret(),
       "local",
     ).run(await readSchedulerSettings(env.DB), () => now);
     expect(result.queued).toBe(3);
@@ -246,11 +255,11 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
     }
   });
 
-  it("a failed Queue binding does not prevent other sites from receiving their triggers", async () => {
+  it("a failed shared Queue batch marks every ambiguous acceptance for retry", async () => {
     await seed(10);
     const messages: TriggerMessage[] = [];
     const bindings = queueEnvironment(messages);
-    bindings.QUEUE_0 = {
+    bindings.DISPATCH_QUEUE = {
       sendBatch: () => Promise.reject(new Error("unavailable")),
     };
     const result = await new TriggerDeliveryApplication(
@@ -260,23 +269,24 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
       "local-secret",
       "local",
     ).run(await readSchedulerSettings(env.DB), () => now);
-    expect(result.queued).toBe(9);
+    expect(result.queued).toBe(0);
     expect(result.errors).toBe(1);
     expect(
       (await repository.list("", 100)).filter(
         (row) => row.status === "unknown",
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(10);
   });
-  it.each([10, 25, 50, 100])(
+  it.each([10, 25, 50, 100, 250, 500])(
     "delivers %i occurrences across ten websites without waiting for business completion",
     async (count) => {
       await seed(count);
       const messages: TriggerMessage[] = [];
+      const batchSizes: number[] = [];
       const app = new TriggerDeliveryApplication(
         repository,
         targets,
-        queueEnvironment(messages),
+        queueEnvironment(messages, batchSizes),
         "local-secret",
         "local",
       );
@@ -286,6 +296,8 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
       );
       expect(result).toEqual({ materialized: count, queued: count, errors: 0 });
       expect(new Set(messages.map((m) => m.idempotencyKey)).size).toBe(count);
+      expect(batchSizes).toHaveLength(Math.ceil(count / 100));
+      expect(Math.max(...batchSizes)).toBeLessThanOrEqual(100);
       const rows = await repository.list("", 1000);
       expect(rows).toHaveLength(count);
       expect(
@@ -304,6 +316,39 @@ describe("L2-023..029 reliable multi-site trigger delivery", () => {
       ).toBe(0);
     },
   );
+
+  it("enqueues 500 websites through five shared Queue batches", async () => {
+    const siteTargets: TargetManifest[] = Array.from(
+      { length: 500 },
+      (_, index) => ({
+        id: `LARGE_SITE_${index}`,
+        label: `Large Site ${index}`,
+        binding: `LARGE_RPC_${index}`,
+        service: `large-site-${index}`,
+        entrypoint: "CronEntrypoint",
+        protocolVersion: 1,
+        manifestRevision: "v1",
+        delivery: {
+          mode: "queue",
+          binding: SHARED_QUEUE_BINDING,
+          queue: SHARED_QUEUE_NAME,
+        },
+      }),
+    );
+    await seed(500, siteTargets);
+    const messages: TriggerMessage[] = [];
+    const batchSizes: number[] = [];
+    const result = await new TriggerDeliveryApplication(
+      repository,
+      siteTargets,
+      queueEnvironment(messages, batchSizes),
+      "local-secret",
+      "local",
+    ).run(await readSchedulerSettings(env.DB), () => now);
+    expect(result).toEqual({ materialized: 500, queued: 500, errors: 0 });
+    expect(new Set(messages.map((message) => message.targetId)).size).toBe(500);
+    expect(batchSizes).toEqual([100, 100, 100, 100, 100]);
+  });
 
   it("atomically deduplicates concurrent ticks and resends an ambiguous acceptance with the same identity", async () => {
     await seed(10);

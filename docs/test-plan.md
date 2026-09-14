@@ -170,6 +170,7 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 - [ ] `L2-029` Queue 模式暂停阻止未发送意图，已入队状态不可假装撤销，业务 unknown 不阻塞未来 occurrence。
 - [ ] `L2-030` 原生 Cloudflare 数字星期/名称转换与未来时间预览正确，未支持扩展明确拒绝。
 - [ ] `L2-031` Web 区分投递与业务结果，RPC 历史记录保持兼容，配置漂移检查与完整本地门禁通过。
+- [ ] `L2-032` 250/500 条同分钟到期跨 500 个不同 Target 全局领取并以不超过 100 条/批写入唯一共享 Queue；500 条不得退化为逐 Target 发送。
 
 追加项沿用第 2 节证据格式。旧记录属于旧版本，新版本必须重新验证受影响项。
 
@@ -275,6 +276,7 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 - [ ] `R7-010` 将 100 条规则、100 个不同 Worker、100/min 持续负载分别评估；超过免费日额度的场景先记录预算缺口，未经批准不制造超额流量。
 - [ ] `R7-011` 真实 Queue 消费在平台调用结束后继续；接收响应丢失、消费者重启、回报重试不重复业务副作用。
 - [ ] `R7-012` Queue 模式的暂停、在途消息、DLQ 和回滚切换完成演练，不把已入队消息当作已撤销。
+- [ ] `R7-013` 共享 Queue 在隔离 Staging 以现有真实 Test Target 重新执行 250/500 条同分钟到期测试；记录物化/入队/业务结果、最长延迟、CPU、D1 和 Queue 用量。500 个不同 Worker 的账户容量不得由此替代。
 
 性能阈值在第一次 Staging 基线测量后由用户确认，再写入本节。首次运行只记录分布，不凭空设定 SLO。
 
@@ -290,7 +292,19 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 - [ ] `R8-008` 用户确认后删除或保留 Staging Worker、D1、路由和 Cron。
 - [ ] `R8-009` 删除前导出需要保留的非敏感证据，删除后确认无残留路由。
 
-## 17. 缺陷等级
+## 17. Phase R9：mkfast 模板接入与替换验收
+
+本阶段只在平台 R3/R7/R8 当前版本回归完成后执行。目标不是证明示例 Worker 能被调用，而是证明 mkfast 模板的原生 `scheduled()` 工作能够安全迁移到统一平台。
+
+- [ ] `R9-001` mkfast 导出仓库 SDK 的命名 `CronEntrypoint.describe()/cron()`；测试部署不依赖网站自己的 Cron Trigger，且不暴露公网执行入口。
+- [ ] `R9-002` mkfast 的积分过期和 AI 异常修复由一个有界 maintenance Action 完整等待并分别记录结果；任一子任务失败不得把整次运行伪装为成功。
+- [ ] `R9-003` 平台与 mkfast 的执行期限一致；正常批量不会被当前 30 秒协议期限过早截断，超限工作可安全留给下一轮。
+- [ ] `R9-004` 隔离 Staging 完成真实 `Platform Cron -> shared Queue -> Service Binding -> mkfast CronEntrypoint -> mkfast D1/DO/Workflow` 闭环；成功、重复投递、部分失败和重试均无重复积分扣减、过期或退款。
+- [ ] `R9-005` 先保留原生 Trigger 完成影子验证，再停用网站原生 Trigger；切换后连续运行和观测通过，并演练恢复原生 Trigger 的回退路径。
+
+永久边界，不作为缺陷关闭：Service Binding 仅适用于同一 Cloudflare Account；调度精度为分钟级；每个新增网站必须加入 Target allowlist 并部署对应 Service Binding；Free/Paid 的 Worker、Queue、D1、CPU 和请求额度始终有效。
+
+## 18. 缺陷等级
 
 - `P0`：生产边界泄漏、凭据泄漏、跨 Target 调用、数据破坏或无法安全停止派发。
 - `P1`：重复业务副作用、状态机错误、错误结果被记为成功、unknown 被危险重试、回滚失败。
@@ -299,9 +313,9 @@ Platform 与 Test Target Workers 必须位于同一个专用测试 Account 或�
 
 P0/P1 出现后停止后续破坏性或长时间阶段，保留现场并先修复。P2 可继续无依赖的测试；P3 进入集中收尾。
 
-## 18. 最终退出条件
+## 19. 最终退出条件
 
-- [ ] 所有必需 `L0`、`L1`、`L2`、`R0`..`R8` 项为 PASS，或有用户批准的明确 SKIPPED 理由。
+- [ ] 所有必需 `L0`、`L1`、`L2`、`R0`..`R9` 项为 PASS，或有用户批准的明确 SKIPPED 理由。
 - [ ] P0、P1 为零；P2 均有负责人和处理结论。
 - [ ] 所有 unknown 均已解释、人工解决或保留为明确已知风险。
 - [ ] 重复 Tick、Retry 和模糊结果场景未产生重复业务副作用。
@@ -310,7 +324,7 @@ P0/P1 出现后停止后续破坏性或长时间阶段，保留现场并先修�
 - [ ] `docs/validation-report.md` 更新为当前 commit 的最终证据摘要。
 - [ ] 用户审阅测试报告并批准进入下一阶段。
 
-## 19. 当前状态
+## 20. 当前状态
 
 - 基线分支：`main`
 - 原始文档基线：`bb612a8`（发布 `/llms.txt`）；原 RPC 版本测试证据与 Staging 清理见 2026-09-10/11 的 test-runs。
@@ -318,3 +332,5 @@ P0/P1 出现后停止后续破坏性或长时间阶段，保留现场并先修�
 - 新 Queue 架构已部署到隔离 Staging，Registration、三 Target Service Binding/Queue 配置和安全边界已通过；但唯一原生 Cron 超过官方传播窗口仍未产生 Tick。`R3-002` FAIL，依赖的真实执行、容量和 Soak 项未 PASS，证据见 `test-runs/2026-09-12-staging.md`。旧远程 PASS 不得沿用。
 - 2026-09-13 纠正结论：Canary 与 Platform 均收到真实 Cron；根因是 Queue 名守卫配置错误和 Workers 不支持 `redirect="error"`。最终提交 `a239b02d6872f1314e23c797b88f120ca0f56a3f` 已通过本地 182 项及远程 10/25/50/100 三 Target 矩阵。`R3-009`、`R7-011` 精确响应丢失子项、`R7-012` rollback 仍未 PASS，见 `test-runs/2026-09-13-staging.md`。
 - 2026-09-13 共享 Queue 重构：提交 `3108339ac10ee3956041136e2d63986491af5bfa` 已通过本地 186 项，并在隔离 Staging 以一个共享 Queue、`max_batch_size=1` 和三个 Service Binding 重新通过 10/25/50/100 矩阵（185/185 首次成功，185/185 唯一业务副作用）。旧三组 Queue/DLQ 已删除；平台暂停且 100 条规则为未来年度时间。`R3-009`、`R7-011` 精确响应丢失子项、`R7-012` 正式 rollback 仍未 PASS。
+- 2026-09-14 容量修复：共享 Queue producer 已改为跨 Target 全局领取并按 100 条/批发送；默认总规则、物化和投递预算提升到 1,000。本地 `L2-032` 的 500 Target/500 occurrence 以 5 批完成；`R7-013` 远程 250/500 仍无证据，不得标记 PASS。
+- 距离正式替代 Cloudflare Trigger 尚缺：提交并部署 2026-09-14 容量修复及 migration，并重跑受影响的部署/成功路径；完成 `R7-013` 远程 250/500、`R3-009`/`R7-006` 连续 60 分钟 soak、soak 内的 `R7-007` Registration 更新与暂停/恢复、`R7-011` 精确响应丢失、`R7-012` 在途/DLQ/回滚和当前版本 `R8-001..009`；随后完成 mkfast 专项 `R9-001..005`。这些项目完成前只能试运行，不能写“完全替代”。

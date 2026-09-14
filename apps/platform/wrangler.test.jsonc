@@ -19,5 +19,22 @@
     "PUBLIC_ORIGIN": "http://localhost:8787",
     "PLATFORM_INSTANCE_ID": "00000000-0000-4000-8000-000000000003",
     "BUILD_VERSION": "test",
+    "DISPATCH_QUEUE_NAME": "unified-cron-dispatch-test",
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "DISPATCH_QUEUE",
+        "queue": "unified-cron-dispatch-test",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "unified-cron-dispatch-test",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_retries": 3,
+      },
+    ],
   },
 }

@@ -162,16 +162,25 @@ export class TriggerDeliveryRepository {
     now: number,
     limit: number,
   ): Promise<DeliveryRow[]> {
+    return this.claimMany([targetId], now, limit);
+  }
+
+  async claimMany(
+    targetIds: readonly string[],
+    now: number,
+    limit: number,
+  ): Promise<DeliveryRow[]> {
+    if (!targetIds.length || limit < 1) return [];
     const lease = crypto.randomUUID();
     const result = await this.db
       .prepare(
         `UPDATE trigger_deliveries SET status='sending',attempts=attempts+1,lease_token=?,lease_expires_at=?,updated_at=?
     WHERE id IN (SELECT d.id FROM trigger_deliveries d JOIN managed_schedule_effective_state v ON v.schedule_id=d.schedule_id AND v.effective_enabled=1
     JOIN registered_actions a ON a.target_id=d.target_id AND a.name=json_extract(d.snapshot_json,'$.action') AND a.version=json_extract(d.snapshot_json,'$.actionVersion') AND a.idempotent=1
-    WHERE d.target_id=? AND ((d.status IN ('pending','unknown') AND d.available_at<=?) OR (d.status='sending' AND d.lease_expires_at<=?))
+    WHERE d.target_id IN (SELECT value FROM json_each(?)) AND ((d.status IN ('pending','unknown') AND d.available_at<=?) OR (d.status='sending' AND d.lease_expires_at<=?))
     ORDER BY d.available_at,d.created_at,d.id LIMIT ?) RETURNING *`,
       )
-      .bind(lease, now + 90000, now, targetId, now, now, limit)
+      .bind(lease, now + 90000, now, JSON.stringify(targetIds), now, now, limit)
       .all();
     return result.results.map((value) => rowSchema.parse(value));
   }

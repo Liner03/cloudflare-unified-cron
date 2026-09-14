@@ -45,7 +45,7 @@ Never place administrator passwords, session cookies, Registration Tokens, Cloud
 
 ## Authenticated mutation APIs
 
-- [Scheduler capacity](/api/v1/system/scheduler-settings): `POST`; requires `If-Match` from System `settingsRevision` plus normal mutation headers. Strict JSON: `max_schedules`, `materialize_budget`, `delivery_budget` (1..1000); `rpc_budget` (1..20); `concurrency` (1..10); `per_target_batch` (1..100). System returns the current `schedulerSettings` and `settingsRevision`.
+- [Scheduler capacity](/api/v1/system/scheduler-settings): `POST`; requires `If-Match` from System `settingsRevision` plus normal mutation headers. Strict JSON: `max_schedules`, `materialize_budget`, `delivery_budget` (1..1000); `rpc_budget` (1..20); `concurrency` (1..10); `per_target_batch` (1..100, retained wire name for the shared Queue claim/send batch). System returns the current `schedulerSettings` and `settingsRevision`. New installations default the first three limits to 1000 and the shared Queue batch to 100.
 
 - [Pause schedule](/api/v1/schedules/{scheduleId}/pause): `POST`; JSON `{}` plus `If-Match`; persists an Operator Override.
 - [Resume schedule](/api/v1/schedules/{scheduleId}/resume): `POST`; JSON `{}` plus `If-Match`; clears only the Operator Override.

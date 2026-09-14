@@ -21,6 +21,12 @@ Website Workers no longer need Queue consumers, reverse Platform bindings or pub
 - One Cron, one Queue and one DLQ serve all logical schedules.
 - Queue invocations, not the Cron invocation, contain website latency.
 - Batch size one provides fault and latency isolation; Cloudflare controls consumer concurrency.
+- Producer-side claiming is global across all Queue Targets. It sends at most
+  100 messages per `sendBatch` call, so 500 same-minute Targets require five
+  Queue calls rather than 500 per-Target calls.
+- New installations default to 1,000 total schedules and 1,000 materializations
+  and deliveries per Tick. The retained `per_target_batch` storage/API name now
+  controls the shared Queue claim/send batch and defaults to 100.
 - Cross-Target routing remains limited to the generated manifest and Service Bindings.
 - Queue operation pricing still scales with actual executions. A shared Queue reduces resources, not per-message operations.
 - Adding websites still requires an allowlisted Service Binding deployment. Dynamic arbitrary Worker invocation is intentionally unsupported.
