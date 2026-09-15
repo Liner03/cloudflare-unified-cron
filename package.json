@@ -9,6 +9,7 @@
   "scripts": {
     "targets:check": "node apps/platform/scripts/sync-targets.mjs",
     "targets:generate": "node apps/platform/scripts/sync-targets.mjs --write",
+    "sdk:pack": "node scripts/build-sdk-release.mjs",
     "build": "pnpm --filter @unified-cron/contracts build && pnpm --filter @unified-cron/worker-sdk build && pnpm --filter @unified-cron/web build && pnpm --filter @unified-cron/example-worker-data build && pnpm --filter @unified-cron/platform build",
     "dev": "pnpm --parallel --filter @unified-cron/example-worker-data --filter @unified-cron/platform --filter @unified-cron/web dev",
     "dev:e2e": "pnpm --parallel --filter @unified-cron/example-worker-data --filter @unified-cron/platform --filter @unified-cron/web dev:e2e",

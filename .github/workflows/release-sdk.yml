@@ -1,0 +1,40 @@
+name: Release Worker SDK
+
+on:
+  push:
+    tags:
+      - "sdk-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @unified-cron/contracts --filter @unified-cron/worker-sdk test
+      - name: Build release archive
+        run: |
+          version="${GITHUB_REF_NAME#sdk-v}"
+          pnpm sdk:pack --version "$version"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#sdk-v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "artifacts/unified-cron-worker-sdk-${version}.tgz" \
+            "artifacts/unified-cron-worker-sdk-${version}.tgz.sha256" \
+            --verify-tag \
+            --title "Unified Cron Worker SDK ${version}" \
+            --notes-file packages/worker-sdk/RELEASE_NOTES.md
