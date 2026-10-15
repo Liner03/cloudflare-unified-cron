@@ -11,7 +11,7 @@ export default defineConfig({
   retries: 0,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:5173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -42,7 +42,7 @@ export default defineConfig({
     command:
       "pnpm db:migrate:local && pnpm test:e2e:reset && pnpm seed:local && pnpm dev:e2e",
     cwd: repositoryRoot,
-    url: "http://127.0.0.1:5173",
+    url: process.env.E2E_BASE_URL ?? "http://127.0.0.1:5173",
     reuseExistingServer: true,
     timeout: 120_000,
   },

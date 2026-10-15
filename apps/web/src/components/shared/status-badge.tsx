@@ -12,6 +12,9 @@ import { Badge } from "@/components/ui/badge";
 
 const labels: Record<string, string> = {
   pending: "待领取",
+  unreported: "未上报",
+  queued: "已入队",
+  sending: "正在投递",
   running: "运行中",
   retry_wait: "重试等待",
   succeeded: "成功",
@@ -44,6 +47,9 @@ const labels: Record<string, string> = {
 
 const icons: Record<string, LucideIcon> = {
   pending: LoaderCircle,
+  unreported: CircleDashed,
+  queued: CircleCheck,
+  sending: LoaderCircle,
   running: LoaderCircle,
   retry_wait: LoaderCircle,
   succeeded: CircleCheck,

@@ -20,12 +20,21 @@ export class ServiceBindingAdapter {
     target: TargetManifest,
     request: CronRequestV1,
   ): Promise<CronResultV1> {
+    return this.prepareExecution(target)(request);
+  }
+
+  /** Resolve configuration before reserving a business invocation in D1. */
+  prepareExecution(
+    target: TargetManifest,
+  ): (request: CronRequestV1) => Promise<CronResultV1> {
     const binding = this.bindingFor(target.binding);
-    const value = await Promise.resolve(binding.cron(request));
-    const result = cronResultV1Schema.parse(value);
-    assertCronResultIdentity(result, request);
-    assertResultWithinLimits(result);
-    return result;
+    return async (request) => {
+      const value = await Promise.resolve(binding.cron(request));
+      const result = cronResultV1Schema.parse(value);
+      assertCronResultIdentity(result, request);
+      assertResultWithinLimits(result);
+      return result;
+    };
   }
 
   async describe(target: TargetManifest) {

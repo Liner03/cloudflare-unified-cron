@@ -40,6 +40,11 @@ const ExecutionDetailPage = lazy(() =>
     default: module.ExecutionDetailPage,
   })),
 );
+const RunDetailPage = lazy(() =>
+  import("@/features/executions/run-detail-page").then((module) => ({
+    default: module.RunDetailPage,
+  })),
+);
 const TargetsPage = lazy(() =>
   import("@/features/targets/targets-page").then((module) => ({
     default: module.TargetsPage,
@@ -84,6 +89,7 @@ const router = createBrowserRouter([
       { path: "executions", element: load(<ExecutionsPage />) },
       { path: "deliveries", element: load(<DeliveriesPage />) },
       { path: "executions/:id", element: load(<ExecutionDetailPage />) },
+      { path: "runs/:id", element: load(<RunDetailPage />) },
       { path: "targets", element: load(<TargetsPage />) },
       { path: "registrations", element: load(<RegistrationsPage />) },
       { path: "system", element: load(<SystemPage />) },

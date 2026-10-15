@@ -17,6 +17,81 @@ export const executionSummarySchema = z.object({
 
 export type ExecutionSummary = z.infer<typeof executionSummarySchema>;
 
+export const runSummarySchema = executionSummarySchema.extend({
+  mode: z.enum(["rpc", "queue"]),
+  attemptCount: z.number().nullable(),
+  deliveryStatus: z.string().nullable(),
+  summary: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  targetLabel: z.string(),
+  scheduleName: z.string(),
+});
+export type RunSummary = z.infer<typeof runSummarySchema>;
+export const signalBucketSchema = z.object({
+  scheduleId: z.string(),
+  count: z.number(),
+  at: z.string(),
+  from: z.string(),
+  to: z.string(),
+  runId: z.string().nullable(),
+  mode: z.enum(["rpc", "queue"]),
+  status: z.string(),
+});
+export type SignalBucket = z.infer<typeof signalBucketSchema>;
+export const runsSchema = z.object({
+  data: z.array(runSummarySchema),
+  summary: z.array(z.object({ status: z.string(), count: z.number() })),
+  meta: z.object({
+    nextCursor: z.string().nullable(),
+    previousCursor: z.string().nullable(),
+    total: z.number(),
+    serverTime: z.string(),
+  }),
+});
+export const runDetailSchema = z.object({
+  data: runSummarySchema.extend({
+    sendAttempts: z.number().nullable(),
+    queuedAt: z.string().nullable(),
+  }),
+});
+export const deliveriesSchema = z.object({
+  data: z.array(
+    z.object({
+      id: z.string(),
+      scheduleId: z.string(),
+      targetId: z.string(),
+      scheduleName: z.string(),
+      targetLabel: z.string(),
+      scheduledFor: z.string(),
+      status: z.string(),
+      attempts: z.number(),
+      businessAttempts: z.number().nullable(),
+      lastError: z.string().nullable(),
+      consumerError: z.string().nullable(),
+      createdAt: z.string(),
+      queuedAt: z.string().nullable(),
+      startedAt: z.string().nullable(),
+      finishedAt: z.string().nullable(),
+      businessResult: z
+        .object({
+          status: z.enum(["succeeded", "failed"]),
+          summary: z.string(),
+        })
+        .nullable(),
+    }),
+  ),
+  summary: z.array(
+    z.object({ status: z.string(), count: z.number(), oldest: z.number() }),
+  ),
+  outcomes: z.array(z.object({ status: z.string(), count: z.number() })),
+  meta: z.object({
+    total: z.number(),
+    nextCursor: z.string().nullable(),
+    previousCursor: z.string().nullable(),
+    serverTime: z.string(),
+  }),
+});
+
 export const scheduleBlockingReasonSchema = z.enum([
   "declared_disabled",
   "operator_paused",
@@ -58,7 +133,19 @@ export const overviewSchema = z.object({
       total_schedules: z.number().nullable(),
     }),
     executions24h: z.array(z.object({ status: z.string(), count: z.number() })),
-    recentExecutions: z.array(executionSummarySchema),
+    recentExecutions: z.array(runSummarySchema),
+    attention: z.object({
+      total: z.number(),
+      items: z.array(runSummarySchema),
+    }),
+    coverage: z.object({
+      total: z.number(),
+      succeeded: z.number(),
+      unreported: z.number(),
+      active: z.number(),
+      unverifiedSchedules: z.number(),
+    }),
+    signalBuckets: z.array(signalBucketSchema),
     system: z
       .object({
         dispatch_paused: z.number(),
@@ -110,7 +197,7 @@ export const scheduleDetailSchema = z.object({
     misfireGraceSeconds: z.number(),
     createdAt: z.string().nullable(),
     updatedAt: z.string().nullable(),
-    recentExecutions: z.array(executionSummarySchema),
+    recentExecutions: z.array(runSummarySchema),
   }),
 });
 

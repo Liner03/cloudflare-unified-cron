@@ -16,15 +16,15 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api-client";
 import {
-  executionsSchema,
   overviewSchema,
   schedulesSchema,
   targetsSchema,
-  type ExecutionSummary,
+  type SignalBucket,
   type ScheduleSummary,
   type Target,
 } from "@/lib/api-schemas";
-import { formatTime } from "@/lib/format";
+import { displayTimezone, formatCron, formatTime } from "@/lib/format";
+import { runHref, runStatusLabels } from "@/lib/runs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ATTENTION_STATUSES = new Set(["failed", "unknown", "retry_wait"]);
@@ -54,18 +54,6 @@ export function OverviewPage() {
     queryFn: ({ signal }) => apiGet("/api/v1/targets", targetsSchema, signal),
     refetchInterval: 30_000,
   });
-  const executions = useQuery({
-    queryKey: ["executions", "overview", "24h"],
-    queryFn: ({ signal }) => {
-      const from = new Date(Date.now() - DAY_MS).toISOString();
-      return apiGet(
-        `/api/v1/executions?from=${encodeURIComponent(from)}&limit=50`,
-        executionsSchema,
-        signal,
-      );
-    },
-    refetchInterval: 30_000,
-  });
   useEffect(() => {
     try {
       window.localStorage.setItem(
@@ -77,7 +65,7 @@ export function OverviewPage() {
     }
   }, [signalExpansion]);
 
-  const queries = [overview, schedules, targets, executions] as const;
+  const queries = [overview, schedules, targets] as const;
   if (queries.some((query) => query.isLoading)) {
     return <LoadingState label="正在汇总网站运行信号" />;
   }
@@ -86,8 +74,7 @@ export function OverviewPage() {
     failedQuery?.isError ||
     !overview.data ||
     !schedules.data ||
-    !targets.data ||
-    !executions.data
+    !targets.data
   ) {
     return (
       <ErrorState
@@ -98,15 +85,18 @@ export function OverviewPage() {
   }
 
   const { data, meta } = overview.data;
+  const weekRate = data.successRates.find((item) => item.window === "7d");
   const now = Date.parse(meta.serverTime);
-  const executionRows = executions.data.data;
-  const attentionExecutions = executionRows.filter((execution) =>
-    ATTENTION_STATUSES.has(execution.status),
-  );
+  const attentionExecutions = data.attention.items;
   const websiteGroups = groupWebsites(
     targets.data.data,
     schedules.data.data,
-    attentionExecutions,
+    new Set([
+      ...data.signalBuckets
+        .filter((bucket) => ATTENTION_STATUSES.has(bucket.status))
+        .map((bucket) => bucket.scheduleId),
+      ...attentionExecutions.map((run) => run.scheduleId),
+    ]),
   );
   const lastSuccessfulTick = data.system?.last_successful_tick_at ?? null;
   const heartbeatStale =
@@ -127,12 +117,16 @@ export function OverviewPage() {
         ? "dispatch_paused"
         : "dispatch_active";
   const attentionCount =
-    attentionExecutions.length + (platformNeedsAttention ? 1 : 0);
+    data.attention.total + (platformNeedsAttention ? 1 : 0);
   const verdict = businessVerdict({
     websites: websiteGroups.length,
     schedules: schedules.data.data.length,
     attentionCount,
     dispatchPaused,
+    coverage: data.coverage,
+    blocked:
+      (data.schedules.total_schedules ?? 0) -
+      (data.schedules.active_schedules ?? 0),
   });
   const isSiteExpanded = (targetId: string, index: number) =>
     signalExpansion[targetId] ?? (websiteGroups.length === 1 || index === 0);
@@ -180,7 +174,10 @@ export function OverviewPage() {
         <div className="signal-ledger-head">
           <div>
             <h2 id="signal-ledger-title">24 小时运行信号</h2>
-            <p>每个节点都来自真实 Execution；树状分支对应网站声明的 Cron。</p>
+            <p>
+              覆盖全部 Queue 与 RPC 运行，按小时聚合；点击节点查看详情。时间：
+              {displayTimezone}。
+            </p>
           </div>
           <div className="signal-ledger-tools">
             <div className="signal-legend" aria-label="运行状态图例">
@@ -189,6 +186,7 @@ export function OverviewPage() {
               <span className="is-retry">等待重试</span>
               <span className="is-warning">结果未知</span>
               <span className="is-failure">失败</span>
+              <span className="is-warning">未上报</span>
               <span className="is-muted">无记录</span>
             </div>
             {websiteGroups.length > 1 ? (
@@ -230,7 +228,7 @@ export function OverviewPage() {
             websiteGroups.map((group, index) => (
               <WebsiteSignal
                 expanded={isSiteExpanded(group.target.id, index)}
-                executions={executionRows}
+                buckets={data.signalBuckets}
                 group={group}
                 key={group.target.id}
                 now={now}
@@ -265,11 +263,24 @@ export function OverviewPage() {
               const active = websiteSchedules.filter(
                 (schedule) => schedule.effectiveEnabled,
               ).length;
-              const abnormal = websiteSchedules.filter((schedule) =>
-                ["failed", "unknown", "retry_wait"].includes(
-                  schedule.lastExecution?.status ?? "",
-                ),
+              const abnormal = data.signalBuckets.filter(
+                (bucket) =>
+                  websiteSchedules.some(
+                    (schedule) => schedule.id === bucket.scheduleId,
+                  ) && ATTENTION_STATUSES.has(bucket.status),
               ).length;
+              const latest = websiteSchedules
+                .map((schedule) => schedule.lastExecution)
+                .filter((item) => item !== null)
+                .sort(
+                  (a, b) => Date.parse(b.at ?? "") - Date.parse(a.at ?? ""),
+                )[0];
+              const next = websiteSchedules
+                .filter(
+                  (schedule) => schedule.effectiveEnabled && schedule.nextRunAt,
+                )
+                .map((schedule) => schedule.nextRunAt ?? "")
+                .sort()[0];
               return (
                 <Link
                   className="website-row"
@@ -284,20 +295,29 @@ export function OverviewPage() {
                         ? "muted"
                         : abnormal > 0
                           ? "attention"
-                          : "healthy"
+                          : latest?.status === "succeeded"
+                            ? "healthy"
+                            : "muted"
                     }
                   />
                   <span className="website-row-main">
                     <strong>{target.label}</strong>
-                    <small className="mono">{target.id}</small>
+                    <small>
+                      {latest ? (
+                        <>
+                          最近结果：{statusLabel(latest.status)} ·{" "}
+                          {formatTime(latest.at)}
+                        </>
+                      ) : (
+                        "暂无运行结果"
+                      )}
+                    </small>
                   </span>
                   <span className="website-row-count tabular">
                     {active}/{websiteSchedules.length} 可派发
                   </span>
                   <span className="website-row-registration">
-                    {target.registration
-                      ? `版本 ${target.registration.revision}`
-                      : "等待首次注册"}
+                    下次 {formatTime(next)}
                   </span>
                   <ArrowRight aria-hidden="true" size={15} />
                 </Link>
@@ -343,7 +363,7 @@ export function OverviewPage() {
               <Link
                 className="attention-item"
                 key={execution.id}
-                to={`/executions/${execution.id}`}
+                to={runHref(execution)}
               >
                 {execution.status === "failed" ? (
                   <CircleAlert aria-hidden="true" size={17} />
@@ -360,17 +380,43 @@ export function OverviewPage() {
                   <small>
                     {formatTime(execution.createdAt)} ·{" "}
                     {statusLabel(execution.status)}
+                    {execution.reasonCode ? ` · ${execution.reasonCode}` : ""}
                   </small>
                 </span>
                 <ArrowRight aria-hidden="true" size={14} />
               </Link>
             ))}
             {!platformNeedsAttention && attentionExecutions.length === 0 ? (
-              <div className="attention-clear">
-                <CheckCircle2 aria-hidden="true" size={20} />
+              <div
+                className="attention-clear"
+                data-quiet={
+                  data.coverage.total === 0 ||
+                  data.coverage.unreported > 0 ||
+                  data.coverage.unverifiedSchedules > 0
+                }
+              >
+                {data.coverage.total > 0 &&
+                data.coverage.unreported === 0 &&
+                data.coverage.unverifiedSchedules === 0 ? (
+                  <CheckCircle2 aria-hidden="true" size={20} />
+                ) : (
+                  <Clock3 aria-hidden="true" size={20} />
+                )}
                 <div>
-                  <strong>当前没有需要处理的执行</strong>
-                  <p>调度心跳与最近 24 小时运行均未发现异常。</p>
+                  <strong>
+                    {data.coverage.unreported > 0
+                      ? `${data.coverage.unreported} 次运行尚未上报结果`
+                      : data.coverage.total === 0
+                        ? "暂无运行证据"
+                        : data.coverage.unverifiedSchedules > 0
+                          ? `${data.coverage.unverifiedSchedules} 个任务等待首次结果`
+                          : "最近 24 小时未发现失败或结果未知"}
+                  </strong>
+                  <p>
+                    {data.coverage.unreported > 0
+                      ? "业务结果尚未确认，可前往执行记录查看。"
+                      : "运行结果与调度心跳分别检查。"}
+                  </p>
                 </div>
               </div>
             ) : null}
@@ -389,10 +435,12 @@ export function OverviewPage() {
         />
         <QualityMetric
           label="7 天首次成功"
-          metric={
-            data.successRates.find((item) => item.window === "7d")
-              ?.firstAttempt ?? null
-          }
+          metric={weekRate?.firstAttempt ?? null}
+          excludedSamples={Math.max(
+            0,
+            (weekRate?.execution.denominator ?? 0) -
+              (weekRate?.firstAttempt.denominator ?? 0),
+          )}
           tone="comparison"
         />
         <div className="quality-platform">
@@ -425,23 +473,27 @@ function TimeScale({ now }: { now: number }) {
 
 function WebsiteSignal({
   group,
-  executions,
+  buckets,
   expanded,
   now,
   onToggle,
 }: {
   group: WebsiteGroup;
-  executions: ExecutionSummary[];
+  buckets: SignalBucket[];
   expanded: boolean;
   now: number;
   onToggle: () => void;
 }) {
   const { target, schedules } = group;
   const taskListId = useId();
-  const hasAttention = executions.some(
-    (execution) =>
-      execution.targetId === target.id &&
-      ATTENTION_STATUSES.has(execution.status),
+  const siteBuckets = buckets.filter((bucket) =>
+    schedules.some((schedule) => schedule.id === bucket.scheduleId),
+  );
+  const hasAttention = siteBuckets.some((bucket) =>
+    ATTENTION_STATUSES.has(bucket.status),
+  );
+  const confirmed = schedules.every(
+    (schedule) => schedule.lastExecution?.status === "succeeded",
   );
   return (
     <article className="signal-site" data-expanded={expanded}>
@@ -462,7 +514,9 @@ function WebsiteSignal({
                 ? "muted"
                 : hasAttention
                   ? "attention"
-                  : "healthy"
+                  : confirmed
+                    ? "healthy"
+                    : "muted"
             }
           />
           <span className="signal-site-identity">
@@ -470,7 +524,8 @@ function WebsiteSignal({
             <span className="mono">{target.id}</span>
           </span>
           <span className="signal-site-toggle-meta tabular">
-            {schedules.length} 个任务
+            {schedules.length} 个任务 ·{" "}
+            {siteBuckets.reduce((sum, bucket) => sum + bucket.count, 0)} 次运行
             <ChevronDown aria-hidden="true" size={15} />
           </span>
         </button>
@@ -491,18 +546,23 @@ function WebsiteSignal({
           </div>
         ) : (
           schedules.map((schedule) => {
-            const scheduleExecutions = executions.filter(
-              (execution) => execution.scheduleId === schedule.id,
+            const scheduleBuckets = buckets.filter(
+              (bucket) => bucket.scheduleId === schedule.id,
             );
             return (
               <div className="signal-task" key={schedule.id}>
                 <div className="signal-task-name">
                   <span aria-hidden="true" className="signal-branch-node" />
                   <Link to={`/schedules/${schedule.id}`}>{schedule.name}</Link>
-                  <code>{schedule.cronExpression}</code>
+                  <span
+                    className="signal-task-schedule"
+                    title={`${schedule.cronExpression} · ${schedule.timezone}`}
+                  >
+                    {formatCron(schedule.cronExpression, schedule.timezone)}
+                  </span>
                 </div>
                 <ExecutionTrace
-                  executions={scheduleExecutions}
+                  buckets={scheduleBuckets}
                   now={now}
                   scheduleName={schedule.name}
                 />
@@ -510,10 +570,18 @@ function WebsiteSignal({
                   {schedule.lastExecution ? (
                     <StatusBadge status={schedule.lastExecution.status} />
                   ) : (
-                    <span className="signal-no-status">尚未运行</span>
+                    <span className="signal-no-status">暂无运行结果</span>
+                  )}
+                  {schedule.lastExecution && (
+                    <small className="tabular">
+                      最近 {formatTime(schedule.lastExecution.at)}
+                    </small>
                   )}
                   <time className="tabular">
-                    {formatTime(schedule.nextRunAt)}
+                    下次{" "}
+                    {schedule.effectiveEnabled
+                      ? formatTime(schedule.nextRunAt)
+                      : "已暂停"}
                   </time>
                 </div>
               </div>
@@ -526,63 +594,71 @@ function WebsiteSignal({
 }
 
 function ExecutionTrace({
-  executions,
+  buckets,
   now,
   scheduleName,
 }: {
-  executions: ExecutionSummary[];
+  buckets: SignalBucket[];
   now: number;
   scheduleName: string;
 }) {
-  const points = executions
-    .flatMap((execution) => {
-      const time = Date.parse(execution.createdAt ?? "");
-      if (!Number.isFinite(time) || time < now - DAY_MS || time > now)
-        return [];
-      return [
-        {
-          execution,
-          x: Math.max(
-            1,
-            Math.min(99, ((time - (now - DAY_MS)) / DAY_MS) * 100),
-          ),
-          y: traceY(execution.status),
-        },
-      ];
-    })
-    .sort((left, right) => left.x - right.x);
+  const total = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
   const summary =
-    points.length === 0
+    total === 0
       ? `${scheduleName} 最近 24 小时没有执行记录`
-      : `${scheduleName} 最近 24 小时有 ${points.length} 次执行`;
-
+      : `${scheduleName} 最近 24 小时有 ${total} 次执行`;
   return (
     <div className="signal-track">
       <div
         aria-label={summary}
-        className={`signal-track-plot${points.length === 0 ? " is-empty" : ""}`}
+        className={`signal-track-plot${total === 0 ? " is-empty" : ""}`}
         role="group"
       >
-        {points.map(({ execution, x, y }) => (
-          <Link
-            aria-label={`${scheduleName}，${formatTime(execution.createdAt)}，${statusLabel(execution.status)}`}
-            className={`signal-execution-link status-${execution.status}`}
-            key={execution.id}
-            style={
-              {
-                "--signal-x": `${x}%`,
-                "--signal-y": `${y}px`,
-                "--signal-stem-top": `${Math.min(y, 16)}px`,
-                "--signal-stem-height": `${Math.abs(y - 16)}px`,
-              } as CSSProperties
-            }
-            title={`${scheduleName} · ${formatTime(execution.createdAt)} · ${statusLabel(execution.status)}`}
-            to={`/executions/${execution.id}`}
-          >
-            <span aria-hidden="true" className="signal-execution-stem" />
-            <span aria-hidden="true" className="signal-execution-point" />
-          </Link>
-        ))}
+        {buckets.map((bucket) => {
+          const x = Math.max(
+            1,
+            Math.min(
+              99,
+              ((Date.parse(bucket.at) - (now - DAY_MS)) / DAY_MS) * 100,
+            ),
+          );
+          const y = traceY(bucket.status);
+          const query = new URLSearchParams({
+            scheduleId: bucket.scheduleId,
+            window: "custom",
+            from: bucket.from,
+            to: bucket.to,
+          });
+          const href = bucket.runId
+            ? runHref({ id: bucket.runId, mode: bucket.mode })
+            : `/executions?${query.toString()}`;
+          const label = `${scheduleName}，${formatTime(bucket.at)}，${bucket.count} 次运行，${statusLabel(bucket.status)}${bucket.count > 1 ? "（该小时最需关注的状态）" : ""}`;
+          return (
+            <Link
+              aria-label={label}
+              title={label}
+              className={`signal-execution-link status-${bucket.status}`}
+              key={`${bucket.scheduleId}:${bucket.from}`}
+              style={
+                {
+                  "--signal-x": `${x}%`,
+                  "--signal-y": `${y}px`,
+                  "--signal-stem-top": `${Math.min(y, 16)}px`,
+                  "--signal-stem-height": `${Math.abs(y - 16)}px`,
+                } as CSSProperties
+              }
+              to={href}
+            >
+              <span aria-hidden="true" className="signal-execution-stem" />
+              <span aria-hidden="true" className="signal-execution-point" />
+              {bucket.count > 1 && (
+                <span className="signal-bucket-count" aria-hidden="true">
+                  {bucket.count}
+                </span>
+              )}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
@@ -592,6 +668,7 @@ function QualityMetric({
   label,
   metric,
   tone,
+  excludedSamples = 0,
 }: {
   label: string;
   metric: {
@@ -600,12 +677,18 @@ function QualityMetric({
     rate: number | null;
   } | null;
   tone: "info" | "comparison";
+  excludedSamples?: number;
 }) {
   const percentage =
     metric?.rate === null || metric?.rate === undefined
       ? null
       : Math.round(metric.rate * 1000) / 10;
-  const value = percentage === null ? "暂无样本" : `${percentage}%`;
+  const value =
+    percentage === null
+      ? excludedSamples > 0
+        ? "次数未记录"
+        : "暂无样本"
+      : `${percentage}%`;
   return (
     <div className="quality-metric" data-tone={tone}>
       <div className="quality-metric-head">
@@ -629,10 +712,19 @@ function QualityMetric({
           }
         />
       </div>
-      <small className="tabular">
+      <small
+        className="tabular"
+        title={
+          excludedSamples > 0
+            ? `${excludedSamples} 条历史回报未记录业务尝试次数，已排除出首次成功率`
+            : undefined
+        }
+      >
         {metric && metric.denominator > 0
           ? `${metric.numerator}/${metric.denominator} 次成功`
-          : "等待有效样本"}
+          : excludedSamples > 0
+            ? "历史回报缺少业务尝试次数"
+            : "等待有效样本"}
       </small>
     </div>
   );
@@ -657,7 +749,7 @@ function readSignalExpansion(): Record<string, boolean> {
 function groupWebsites(
   targets: Target[],
   schedules: ScheduleSummary[],
-  attentionExecutions: ExecutionSummary[],
+  attentionScheduleIds: Set<string>,
 ): WebsiteGroup[] {
   return targets
     .map((target) => ({
@@ -665,12 +757,8 @@ function groupWebsites(
       schedules: schedules
         .filter((schedule) => schedule.targetId === target.id)
         .sort((left, right) => {
-          const leftAttention = attentionExecutions.some(
-            (execution) => execution.scheduleId === left.id,
-          );
-          const rightAttention = attentionExecutions.some(
-            (execution) => execution.scheduleId === right.id,
-          );
+          const leftAttention = attentionScheduleIds.has(left.id);
+          const rightAttention = attentionScheduleIds.has(right.id);
           return (
             Number(rightAttention) - Number(leftAttention) ||
             left.name.localeCompare(right.name, "zh-CN")
@@ -678,11 +766,11 @@ function groupWebsites(
         }),
     }))
     .sort((left, right) => {
-      const leftAttention = attentionExecutions.some(
-        (execution) => execution.targetId === left.target.id,
+      const leftAttention = left.schedules.some((schedule) =>
+        attentionScheduleIds.has(schedule.id),
       );
-      const rightAttention = attentionExecutions.some(
-        (execution) => execution.targetId === right.target.id,
+      const rightAttention = right.schedules.some((schedule) =>
+        attentionScheduleIds.has(schedule.id),
       );
       return (
         Number(rightAttention) - Number(leftAttention) ||
@@ -696,6 +784,14 @@ function businessVerdict(input: {
   schedules: number;
   attentionCount: number;
   dispatchPaused: boolean;
+  coverage: {
+    total: number;
+    succeeded: number;
+    unreported: number;
+    active: number;
+    unverifiedSchedules: number;
+  };
+  blocked: number;
 }) {
   if (input.websites === 0 || input.schedules === 0) {
     return { label: "等待网站发布自动任务", tone: "quiet" } as const;
@@ -709,7 +805,33 @@ function businessVerdict(input: {
       tone: "attention",
     } as const;
   }
-  return { label: "所有网站自动任务运行正常", tone: "healthy" } as const;
+  if (input.blocked > 0)
+    return {
+      label: `${input.blocked} 个任务当前不可派发`,
+      tone: "attention",
+    } as const;
+  if (input.coverage.unreported > 0)
+    return {
+      label: `${input.coverage.unreported} 次运行尚未确认业务结果`,
+      tone: "quiet",
+    } as const;
+  if (input.coverage.unverifiedSchedules > 0)
+    return {
+      label: `${input.coverage.unverifiedSchedules} 个任务等待首次运行结果`,
+      tone: "quiet",
+    } as const;
+  if (input.coverage.succeeded === 0)
+    return {
+      label:
+        input.coverage.active > 0
+          ? `${input.coverage.active} 次任务正在进行`
+          : "最近 24 小时暂无成功运行证据",
+      tone: "quiet",
+    } as const;
+  return {
+    label: `最近 24 小时已确认 ${input.coverage.succeeded} 次成功`,
+    tone: "healthy",
+  } as const;
 }
 
 function traceY(status: string): number {
@@ -720,13 +842,7 @@ function traceY(status: string): number {
 }
 
 function statusLabel(status: string): string {
-  return (
-    {
-      failed: "明确失败",
-      unknown: "结果未知",
-      retry_wait: "等待重试",
-    }[status] ?? status
-  );
+  return runStatusLabels[status] ?? status;
 }
 
 function targetLabel(targets: Target[], targetId: string): string {
