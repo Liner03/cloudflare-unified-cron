@@ -46,13 +46,16 @@ Schedule 不提供 Run now。需要重放一个已完成的业务意图时使用
 
 ## 成功率
 
-- Execution success rate = `succeeded / (succeeded + failed + unknown)`。
-- First-attempt success rate 使用同一 resolved 样本，只把 `attempt_count = 1` 的 succeeded 计为分子。
-- `skipped`、`cancelled`、pending、running 与 retry_wait 不进入分母。
+- 业务成功率同时覆盖 RPC 和 Queue。RPC 使用 `succeeded / (succeeded + failed + unknown)`；Queue 仅纳入已回报的 succeeded/failed，入队或投递结果未知不代表业务结果。
+- 首次成功率只纳入业务尝试次数已知的上述样本，分子为第 1 次业务尝试成功的次数。Queue 的 producer 投递次数、单条消息的 retry 序号与按 Delivery 持久化的业务 Attempt 次数独立。未发出 RPC 的预留会撤销；无法确认的遗留预留、历史回报或独立消费者回报保持次数未知，不参与首次成功率，不推定为 1。
+- `skipped`、`cancelled`、pending、running、retry_wait 与 unreported 不进入分母。
+- 控制台执行记录统一展示两种方式；触发记录专门查看 Queue 的投递证据。筛选汇总与列表使用同一网站、任务、时间和状态范围，分页不限制总览的异常统计。前后翻页使用 API 返回的边界游标与方向，刷新、浏览器后退和未缓存页加载均不依赖组件本地游标栈。
+- 总览信号按小时聚合完整 24 小时窗口，节点显示运行次数和该小时最需关注的状态，可点击查看全部对应记录。没有运行证据或尚未上报结果时不显示业务正常。Cron 说明使用声明时区，所有运行时间明确标注浏览器显示时区。
 - 每个值必须同时展示 24 小时、7 天或 30 天窗口以及 numerator/denominator；分母为 0 时显示无数据，不显示 100%。
 
 ## 保留与清理
 
+- Queue 已入队、跳过或取消的投递及业务回报：30 天；未解决的投递保留供调查。界面的“全部保留记录”不表示永久累计数量。
 - succeeded/skipped/cancelled：14 天。
 - failed：30 天。
 - audit：90 天。

@@ -28,11 +28,13 @@ Never place administrator passwords, session cookies, Registration Tokens, Cloud
 
 ## Authenticated read APIs
 
-- [Trigger deliveries](/api/v1/deliveries): `GET`; optional `scheduleId` and `limit=1..1000`; returns recent delivery rows and global status counts. `queued` means durable Queue acceptance, never business success. `businessResult=null` means not reported. Legacy Execution success rates exclude these deliveries.
+- [Trigger deliveries](/api/v1/deliveries): `GET`; optional `scheduleId`, `targetId`, delivery `status`, business `result=succeeded|failed|unreported`, `from`, `to`, `cursor`, `direction=next|previous` and `limit=1..1000`; rows, status counts, business outcomes and `meta.total` share the same filter scope. `meta.nextCursor` and `meta.previousCursor` navigate all retained records with their matching direction. `queued` means durable Queue acceptance, never business success. `businessResult=null` means not reported. Confirmed Queue business results participate in success rates; send attempts are separate from nullable consumer attempt counts.
 
-- [Operational overview](/api/v1/overview): `GET`; schedule counts, recent executions, 24-hour status distribution, success-rate windows, and scheduler state.
+- [Run history](/api/v1/runs): `GET`; unified RPC and Queue business history. Filters: `status`, `source`, `mode=rpc|queue`, `targetId`, `scheduleId`, ISO `from`/`to`, `cursor`, `direction=next|previous`, `limit=1..100` (default 50). `summary` and `meta.total` describe the full filtered window; pagination uses `meta.nextCursor` with `direction=next` and `meta.previousCursor` with `direction=previous`. Cursors retain the filtered page across refresh and browser history.
+- [Run detail](/api/v1/runs/{runId}): `GET`; mode, business outcome, delivery state, timestamps and known business/send attempt counts. RPC operator commands remain under `/executions`.
+- [Operational overview](/api/v1/overview): `GET`; full 24-hour RPC and Queue distribution, `attention.total` with prioritized items, `coverage`, hourly `signalBuckets`, success-rate windows, and scheduler state. Buckets include count, most severe observed status and drill-down time bounds; they are not truncated to a history page.
 - [List schedules](/api/v1/schedules): `GET`; optional `search`, `target`, and `enabled=true|false` query parameters.
-- [Schedule detail](/api/v1/schedules/{scheduleId}): `GET`; configuration snapshot and recent executions.
+- [Schedule detail](/api/v1/schedules/{scheduleId}): `GET`; configuration snapshot and unified recent RPC/Queue runs.
 - [Preview Cron occurrences](/api/v1/cron/preview): `POST`; JSON `{ "cronExpression", "timezone", "count"?, "after"? }`; read-only calculation but still follows authenticated mutation headers.
 - [List targets](/api/v1/targets): `GET`; deployed Target metadata joined with D1 state, Registration, and declared Actions.
 - [Target detail](/api/v1/targets/{targetId}): `GET`; Target state, schedules, Registration, and Action capabilities.

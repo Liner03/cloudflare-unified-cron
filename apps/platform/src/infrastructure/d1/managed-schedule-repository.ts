@@ -7,12 +7,12 @@ import {
 } from "@unified-cron/contracts";
 import { z } from "zod";
 import { DomainError } from "../../domain/error";
-import { serializeExecutionSummary } from "./execution-view";
 import type { MutationPlan } from "./idempotent-mutation";
 import { CronCalculator } from "../cron/cron-calculator";
 import { RegisteredTargetCatalog } from "./registered-target-catalog";
 import { getTargetManifest } from "../../targets.manifest";
 import { TriggerDeliveryRepository } from "./trigger-delivery-repository";
+import { serializeRun } from "./run-history-repository";
 
 const scheduleRowSchema = z.object({
   id: z.string(),
@@ -107,9 +107,9 @@ export class ManagedScheduleRepository {
                 state.target_enabled, state.dispatch_paused,
                 state.effective_enabled,
                 s.revision, s.next_run_at,
-                (SELECT e.status FROM executions e WHERE e.schedule_id = s.id
+                (SELECT e.status FROM run_history e WHERE e.schedule_id = s.id
                  ORDER BY e.created_at DESC, e.id DESC LIMIT 1) AS last_status,
-                (SELECT e.created_at FROM executions e WHERE e.schedule_id = s.id
+                (SELECT e.created_at FROM run_history e WHERE e.schedule_id = s.id
                  ORDER BY e.created_at DESC, e.id DESC LIMIT 1) AS last_execution_at
          FROM schedules s
          JOIN targets t ON t.id = s.target_id
@@ -141,16 +141,15 @@ export class ManagedScheduleRepository {
     const row = await this.requireManaged(id);
     const recent = await this.db
       .prepare(
-        `SELECT id, schedule_id, target_id, source, status, reason_code,
-                scheduled_for, attempt_count, created_at, finished_at
-         FROM executions WHERE schedule_id = ?
+        `SELECT *
+         FROM run_history WHERE schedule_id = ?
          ORDER BY created_at DESC, id DESC LIMIT 10`,
       )
       .bind(row.id)
       .all();
     return {
       ...serializeSchedule(row),
-      recentExecutions: recent.results.map(serializeExecutionSummary),
+      recentExecutions: recent.results.map(serializeRun),
       recentDeliveries: await new TriggerDeliveryRepository(this.db).list(
         row.id,
         10,

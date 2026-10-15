@@ -20,10 +20,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiGet, apiMutate, errorMessage } from "@/lib/api-client";
+import { runHref } from "@/lib/runs";
 import { scheduleDetailSchema, stateMutationSchema } from "@/lib/api-schemas";
 import {
   formatScheduleBlockingReasons,
   formatTime,
+  displayTimezone,
+  formatCron,
   shortId,
 } from "@/lib/format";
 
@@ -35,6 +38,7 @@ export function ScheduleDetailPage() {
     queryFn: ({ signal }) =>
       apiGet(`/api/v1/schedules/${id}`, scheduleDetailSchema, signal),
     enabled: id.length > 0,
+    refetchInterval: 30000,
   });
   const mutation = useMutation({
     mutationFn: async (operation: "pause" | "resume") => {
@@ -54,6 +58,7 @@ export function ScheduleDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["schedule", id] }),
         queryClient.invalidateQueries({ queryKey: ["schedules"] }),
         queryClient.invalidateQueries({ queryKey: ["overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["runs"] }),
       ]);
       toast.success(
         operation === "pause" ? "Schedule 已暂停" : "Schedule 已恢复",
@@ -136,9 +141,16 @@ export function ScheduleDetailPage() {
           <CardContent>
             <dl className="detail-list">
               <dt>下一次</dt>
-              <dd className="tabular">{formatTime(schedule.nextRunAt)}</dd>
+              <dd className="tabular">
+                {formatTime(schedule.nextRunAt)} · {displayTimezone}
+              </dd>
               <dt>Cron</dt>
-              <dd className="mono">{schedule.cronExpression}</dd>
+              <dd>
+                <span className="mono">{schedule.cronExpression}</span>
+                <div>
+                  {formatCron(schedule.cronExpression, schedule.timezone)}
+                </div>
+              </dd>
               <dt>Timezone</dt>
               <dd className="mono">{schedule.timezone}</dd>
               <dt>Target / Action</dt>
@@ -190,7 +202,7 @@ export function ScheduleDetailPage() {
           <CardContent className="px-0 pb-0">
             {schedule.recentExecutions.length === 0 ? (
               <div className="p-5 text-sm text-muted-foreground">
-                尚无执行记录。等待 Worker 声明的下一次定时发生。
+                暂无运行结果。Queue 和 RPC 的运行均会显示在此。
               </div>
             ) : (
               <Table>
@@ -207,7 +219,7 @@ export function ScheduleDetailPage() {
                       <TableCell>
                         <Link
                           className="mono text-xs font-semibold hover:underline"
-                          to={`/executions/${execution.id}`}
+                          to={runHref(execution)}
                         >
                           {shortId(execution.id)}
                         </Link>

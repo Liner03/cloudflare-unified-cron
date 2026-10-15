@@ -20,39 +20,79 @@ export async function consumeDispatchQueue(
   const adapter = new ServiceBindingAdapter(env);
   for (const message of batch.messages) {
     let deliveryId: string | null = null;
+    let attemptId: string | null = null;
+    let businessStarted = false;
     try {
       const job = triggerMessageSchema.parse(message.body);
       deliveryId = job.deliveryId;
       const target = getTargetManifest(job.targetId);
       if (!target?.delivery) throw new Error("DISPATCH_TARGET_NOT_CONFIGURED");
-      const attemptId = crypto.randomUUID();
-      const result = await adapter.execute(
-        target,
-        toCronRequest(job, attemptId, message.attempts),
+      const execute = adapter.prepareExecution(target);
+      attemptId = crypto.randomUUID();
+      const attempt = await deliveries.consumerStarted(
+        job.deliveryId,
+        attemptId,
+        Date.now(),
+      );
+      if (attempt === null) {
+        message.ack();
+        continue;
+      }
+      businessStarted = true;
+      const result = await execute(
+        toCronRequest(
+          job,
+          attemptId,
+          attempt.attemptCount === null
+            ? message.attempts
+            : attempt.attemptNumber,
+        ),
       );
       await deliveries.report(
         job.deliveryId,
         job.receiptToken,
         toTriggerResult(result),
         Date.now(),
+        attemptId,
       );
       message.ack();
     } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+              .replace(/\b(?:ucrt|ucrr|ucas)_[A-Za-z0-9_-]+\b/g, "[REDACTED]")
+              .slice(0, 256)
+          : "Unknown error";
+      if (deliveryId !== null) {
+        try {
+          if (!businessStarted && attemptId !== null)
+            await deliveries.consumerNotStarted(
+              deliveryId,
+              attemptId,
+              Date.now(),
+            );
+          await deliveries.consumerFailed(
+            deliveryId,
+            errorMessage,
+            Date.now(),
+            attemptId,
+          );
+        } catch {
+          console.error(
+            JSON.stringify({
+              event: "dispatch_observation_failed",
+              deliveryId,
+            }),
+          );
+        }
+      }
       console.error(
         JSON.stringify({
           event: "dispatch_consumer_failed",
           deliveryId,
           errorName:
             error instanceof Error ? error.name.slice(0, 80) : "UnknownError",
-          errorMessage:
-            error instanceof Error
-              ? error.message
-                  .replace(
-                    /\b(?:ucrt|ucrr|ucas)_[A-Za-z0-9_-]+\b/g,
-                    "[REDACTED]",
-                  )
-                  .slice(0, 256)
-              : "Unknown error",
+          errorMessage,
         }),
       );
       message.retry({ delaySeconds: 60 });

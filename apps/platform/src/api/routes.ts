@@ -9,6 +9,7 @@ import { registerAuthRoutes } from "./routes/auth";
 import { registerRegistrationTokenRoutes } from "./routes/registration-tokens";
 import { registerWorkerRegistrationRoute } from "./routes/registration";
 import { registerSuccessRateRoutes } from "./routes/success-rates";
+import { registerRunRoutes } from "./routes/runs";
 import {
   authenticate,
   enforceMutationRequest,
@@ -67,6 +68,7 @@ registerOverviewRoutes(app);
 registerScheduleRoutes(app);
 registerTargetRoutes(app);
 registerExecutionRoutes(app);
+registerRunRoutes(app);
 registerSystemRoutes(app);
 registerRegistrationTokenRoutes(app);
 registerSuccessRateRoutes(app);

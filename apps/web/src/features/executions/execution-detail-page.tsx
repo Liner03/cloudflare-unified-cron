@@ -68,6 +68,8 @@ export function ExecutionDetailPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["execution", id] }),
         queryClient.invalidateQueries({ queryKey: ["executions"] }),
+        queryClient.invalidateQueries({ queryKey: ["runs"] }),
+        queryClient.invalidateQueries({ queryKey: ["schedules"] }),
         queryClient.invalidateQueries({ queryKey: ["overview"] }),
       ]);
       if (input.operation === "rerun" && "executionId" in result.data) {

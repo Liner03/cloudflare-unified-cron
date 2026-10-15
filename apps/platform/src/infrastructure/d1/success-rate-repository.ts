@@ -4,6 +4,7 @@ const rateRowSchema = z.object({
   denominator: z.number(),
   succeeded: z.number(),
   first_attempt_succeeded: z.number(),
+  first_attempt_denominator: z.number(),
 });
 
 export type SuccessRateWindow = "24h" | "7d" | "30d";
@@ -42,7 +43,7 @@ export class SuccessRateRepository {
     const clauses = [
       "created_at >= ?",
       "created_at <= ?",
-      "status IN ('succeeded', 'failed', 'unknown')",
+      "(status IN ('succeeded', 'failed') OR (mode='rpc' AND status='unknown'))",
     ];
     const bindings: Array<string | number> = [from, input.now];
     if (input.targetId !== undefined) {
@@ -60,8 +61,10 @@ export class SuccessRateRepository {
                   AS succeeded,
                 COALESCE(SUM(CASE WHEN status = 'succeeded' AND attempt_count = 1
                                   THEN 1 ELSE 0 END), 0)
-                  AS first_attempt_succeeded
-         FROM executions
+                  AS first_attempt_succeeded,
+                COALESCE(SUM(CASE WHEN attempt_count IS NOT NULL THEN 1 ELSE 0 END), 0)
+                  AS first_attempt_denominator
+         FROM run_history
          WHERE ${clauses.join(" AND ")}`,
       )
       .bind(...bindings)
@@ -71,6 +74,7 @@ export class SuccessRateRepository {
         denominator: 0,
         succeeded: 0,
         first_attempt_succeeded: 0,
+        first_attempt_denominator: 0,
       },
     );
     return {
@@ -78,7 +82,10 @@ export class SuccessRateRepository {
       from: new Date(from).toISOString(),
       to: new Date(input.now).toISOString(),
       execution: toRate(row.succeeded, row.denominator),
-      firstAttempt: toRate(row.first_attempt_succeeded, row.denominator),
+      firstAttempt: toRate(
+        row.first_attempt_succeeded,
+        row.first_attempt_denominator,
+      ),
     };
   }
 

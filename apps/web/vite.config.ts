@@ -8,6 +8,8 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
   server: {
     port: 5173,
-    proxy: { "/api": "http://127.0.0.1:8787" },
+    proxy: {
+      "/api": process.env.CRON_DEV_API_ORIGIN ?? "http://127.0.0.1:8787",
+    },
   },
 });

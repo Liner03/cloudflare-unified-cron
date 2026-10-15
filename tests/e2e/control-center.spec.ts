@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+const testOrigin = process.env.E2E_BASE_URL ?? "http://127.0.0.1:5173";
 
 test("keeps Queue acceptance separate from business success", async ({
   page,
@@ -12,6 +13,14 @@ test("keeps Queue acceptance separate from business success", async ({
             id: "delivery-ui",
             scheduleId: "schedule-ui",
             targetId: "SITE_A",
+            targetLabel: "Site A",
+            scheduleName: "巡检任务",
+            businessAttempts: null,
+            consumerError: null,
+            createdAt: "2026-09-12T00:00:00Z",
+            queuedAt: "2026-09-12T00:00:00Z",
+            startedAt: null,
+            finishedAt: null,
             scheduledFor: "2026-09-12T00:00:00Z",
             status: "queued",
             attempts: 1,
@@ -19,6 +28,13 @@ test("keeps Queue acceptance separate from business success", async ({
             businessResult: null,
           },
         ],
+        meta: {
+          total: 1,
+          nextCursor: null,
+          previousCursor: null,
+          serverTime: new Date().toISOString(),
+        },
+        outcomes: [{ status: "unreported", count: 1 }],
         summary: [
           {
             status: "queued",
@@ -33,11 +49,135 @@ test("keeps Queue acceptance separate from business success", async ({
   await expect(
     page.getByRole("heading", { name: "触发记录", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("未上报", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "SITE_A 查看计划", exact: true }),
+    page.getByRole("cell", { name: "未上报", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("成功", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "巡检任务", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator("tbody").getByText("成功", { exact: true }),
+  ).toHaveCount(0);
+});
+
+for (const state of ["empty", "unreported"] as const) {
+  test(`does not claim healthy business results for ${state} evidence`, async ({
+    page,
+  }) => {
+    await login(page, "/");
+    await mockSparseSignal(page, false, state);
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "业务总览", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("所有网站自动任务运行正常", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator(".overview-verdict")).toHaveText(
+      state === "empty"
+        ? "1 个任务等待首次运行结果"
+        : "1 次运行尚未确认业务结果",
+    );
+    await expect(page.locator(".overview-verdict")).toHaveAttribute(
+      "data-tone",
+      "quiet",
+    );
+    await expect(page.getByRole("meter").first()).not.toHaveAttribute(
+      "aria-valuenow",
+    );
+    await expect(
+      page.getByText("每 6 小时，第 0 分 · UTC", { exact: true }),
+    ).toBeVisible();
+  });
+}
+
+test("paginates and filters Queue business history and opens the actual run detail", async ({
+  page,
+}) => {
+  await login(page, "/executions");
+  const at = new Date().toISOString();
+  const first = {
+    id: "queue-success",
+    scheduleId: "queue-plan",
+    targetId: "SITE_A",
+    targetLabel: "监测网站",
+    scheduleName: "Sitemap 巡检第 1 批",
+    mode: "queue",
+    source: "cron",
+    status: "succeeded",
+    deliveryStatus: "queued",
+    attemptCount: 1,
+    summary: "监测完成",
+    reasonCode: null,
+    scheduledFor: at,
+    createdAt: at,
+    startedAt: at,
+    finishedAt: at,
+  };
+  const second = {
+    ...first,
+    id: "queue-failure",
+    scheduleName: "Sitemap 巡检第 2 批",
+    status: "failed",
+    summary: "监测连接失败",
+  };
+  await page.route("**/api/v1/runs?*", (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const failed = params.get("status") === "failed";
+    const next = params.has("cursor") && params.get("direction") !== "previous";
+    return route.fulfill({
+      json: {
+        data: [failed || next ? second : first],
+        summary: failed
+          ? [{ status: "failed", count: 1 }]
+          : [
+              { status: "succeeded", count: 1 },
+              { status: "failed", count: 1 },
+            ],
+        meta: {
+          total: failed ? 1 : 2,
+          nextCursor: failed || next ? null : "next-page",
+          previousCursor: !failed && next ? "previous-page" : null,
+          serverTime: at,
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/runs/queue-failure", (route) =>
+    route.fulfill({
+      json: { data: { ...second, sendAttempts: 3, queuedAt: at } },
+    }),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("link", { name: first.scheduleName, exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: second.scheduleName, exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "上一页", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: first.scheduleName, exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("执行方式筛选", { exact: true }).selectOption("queue");
+  await page.getByLabel("状态筛选", { exact: true }).selectOption("failed");
+  await expect(page).toHaveURL(/mode=queue.*status=failed/);
+  await expect(
+    page.getByRole("link", { name: first.scheduleName, exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "下一页", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("link", { name: second.scheduleName, exact: true })
+    .click();
+  await expect(page).toHaveURL(/runs\/queue-failure/);
+  await expect(page.getByText("监测连接失败", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("已入队 · 3 次投递", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("1 次", { exact: true })).toBeVisible();
 });
 
 test("shows configurable scheduler budgets from the real API", async ({
@@ -120,7 +260,9 @@ test("authenticates and navigates the registered control plane", async ({
   await expect(
     page.getByRole("heading", { name: "网站", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("已注册", { exact: true })).toBeVisible();
+  await expect(
+    page.locator("#target-site-DATA").getByText("已注册", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(/e2e-/).first()).toBeVisible();
   await page.getByRole("button", { name: "退出管理员登录" }).click();
   await expect(
@@ -368,6 +510,15 @@ test("shows dispatch pause separately from stale heartbeat", async ({
           schedules: { active_schedules: 0, total_schedules: 0 },
           executions24h: [],
           recentExecutions: [],
+          attention: { total: 0, items: [] },
+          coverage: {
+            total: 0,
+            succeeded: 0,
+            unreported: 0,
+            active: 0,
+            unverifiedSchedules: 0,
+          },
+          signalBuckets: [],
           successRates: rateWindows(),
           system: {
             dispatch_paused: 1,
@@ -404,7 +555,7 @@ async function login(page: Page, path: string) {
 async function bootstrapRegistration(page: Page) {
   const issued = await page.request.post("/api/v1/registration-tokens", {
     headers: {
-      Origin: "http://127.0.0.1:5173",
+      Origin: testOrigin,
       "Idempotency-Key": `e2e:${crypto.randomUUID()}`,
     },
     data: { targetId: "DATA", label: "Playwright", expiresInDays: 1 },
@@ -439,7 +590,7 @@ async function ensureOperatorOverrideCleared(page: Page) {
       `/api/v1/schedules/${schedule.id}/resume`,
       {
         headers: {
-          Origin: "http://127.0.0.1:5173",
+          Origin: testOrigin,
           "If-Match": `"${schedule.revision}"`,
           "Idempotency-Key": `e2e:${crypto.randomUUID()}`,
         },
@@ -523,12 +674,22 @@ function rateWindows(rate: number | null = null) {
   }));
 }
 
-async function mockSparseSignal(page: Page, includeSecondSite = false) {
+async function mockSparseSignal(
+  page: Page,
+  includeSecondSite = false,
+  state: "mixed" | "empty" | "unreported" = "mixed",
+) {
   const now = "2026-09-10T12:00:00.000Z";
   const earlier = "2026-09-10T06:00:00.000Z";
   const later = "2026-09-10T10:30:00.000Z";
-  const executions = [
+  const baseExecutions = [
     {
+      mode: "rpc",
+      deliveryStatus: null,
+      summary: "done",
+      startedAt: earlier,
+      targetLabel: "Data Worker",
+      scheduleName: "稀疏任务",
       id: "signal-success",
       scheduleId: "signal-sparse",
       targetId: "DATA",
@@ -541,6 +702,12 @@ async function mockSparseSignal(page: Page, includeSecondSite = false) {
       finishedAt: earlier,
     },
     {
+      mode: "rpc",
+      deliveryStatus: null,
+      summary: "failed",
+      startedAt: later,
+      targetLabel: "Data Worker",
+      scheduleName: "稀疏任务",
       id: "signal-failure",
       scheduleId: "signal-sparse",
       targetId: "DATA",
@@ -553,6 +720,21 @@ async function mockSparseSignal(page: Page, includeSecondSite = false) {
       finishedAt: later,
     },
   ];
+  const executions =
+    state === "empty"
+      ? []
+      : state === "unreported"
+        ? [
+            {
+              ...baseExecutions[0],
+              mode: "queue",
+              deliveryStatus: "queued",
+              status: "unreported",
+              summary: null,
+              attemptCount: null,
+            },
+          ]
+        : baseExecutions;
   const schedule = {
     id: "signal-sparse",
     key: "signal-sparse",
@@ -570,7 +752,13 @@ async function mockSparseSignal(page: Page, includeSecondSite = false) {
     operatorPaused: false,
     revision: 1,
     nextRunAt: "2026-09-10T18:00:00.000Z",
-    lastExecution: { status: "failed", at: later },
+    lastExecution:
+      state === "empty"
+        ? null
+        : {
+            status: state === "unreported" ? "unreported" : "failed",
+            at: later,
+          },
   };
   const schedules = includeSecondSite
     ? [
@@ -632,11 +820,36 @@ async function mockSparseSignal(page: Page, includeSecondSite = false) {
             active_schedules: schedules.length,
             total_schedules: schedules.length,
           },
-          executions24h: [
-            { status: "succeeded", count: 1 },
-            { status: "failed", count: 1 },
-          ],
+          executions24h: [...new Set(executions.map((run) => run.status))].map(
+            (status) => ({
+              status,
+              count: executions.filter((run) => run.status === status).length,
+            }),
+          ),
           recentExecutions: executions,
+          attention: {
+            total: executions.filter((run) => run.status === "failed").length,
+            items: executions.filter((run) => run.status === "failed"),
+          },
+          coverage: {
+            total: executions.length,
+            succeeded: executions.filter((run) => run.status === "succeeded")
+              .length,
+            unreported: executions.filter((run) => run.status === "unreported")
+              .length,
+            active: 0,
+            unverifiedSchedules: state === "mixed" ? 0 : 1,
+          },
+          signalBuckets: executions.map((run) => ({
+            scheduleId: "signal-sparse",
+            count: 1,
+            at: run.createdAt,
+            from: run.createdAt,
+            to: run.createdAt,
+            runId: run.id,
+            mode: run.mode,
+            status: run.status,
+          })),
           system: {
             dispatch_paused: 0,
             last_successful_tick_at: Date.parse(now),
@@ -644,7 +857,7 @@ async function mockSparseSignal(page: Page, includeSecondSite = false) {
             last_tick_scheduled_at: Date.parse(now),
             build_version: "test",
           },
-          successRates: rateWindows(0.5),
+          successRates: rateWindows(state === "mixed" ? 0.5 : null),
         },
         meta: { serverTime: now },
       },
