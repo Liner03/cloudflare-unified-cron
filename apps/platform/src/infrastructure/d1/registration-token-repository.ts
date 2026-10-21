@@ -4,6 +4,7 @@ import { getTargetManifest } from "../../targets.manifest";
 import { sha256Hex } from "../security/crypto";
 
 const TOKEN_IDEMPOTENCY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const NO_EXPIRY_TIMESTAMP = Number.MAX_SAFE_INTEGER;
 
 const storedIdempotencySchema = z.object({
   request_hash: z.string(),
@@ -14,7 +15,8 @@ const issuedTokenReplaySchema = z.object({
   id: z.string(),
   targetId: z.string(),
   label: z.string(),
-  expiresAt: z.string(),
+  expiresAt: z.string().nullable(),
+  noExpire: z.boolean().default(false),
 });
 
 const rotatedTokenReplaySchema = issuedTokenReplaySchema.extend({
@@ -27,6 +29,7 @@ const tokenListRowSchema = z.object({
   label: z.string(),
   scope: z.literal("registration:write"),
   expires_at: z.number(),
+  no_expire: z.number(),
   last_used_at: z.number().nullable(),
   revoked_at: z.number().nullable(),
   created_by: z.string(),
@@ -48,7 +51,8 @@ export interface RegistrationTokenView {
   targetId: string;
   label: string;
   scope: "registration:write";
-  expiresAt: string;
+  expiresAt: string | null;
+  noExpire: boolean;
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdBy: string;
@@ -90,7 +94,7 @@ export class RegistrationTokenRepository {
       .prepare(
         `SELECT id, target_id FROM registration_tokens
          WHERE token_hash = ? AND scope = 'registration:write'
-           AND revoked_at IS NULL AND expires_at > ?`,
+           AND revoked_at IS NULL AND (no_expire = 1 OR expires_at > ?)`,
       )
       .bind(await sha256Hex(rawToken), now)
       .first<{ id: string; target_id: string }>();
@@ -101,6 +105,7 @@ export class RegistrationTokenRepository {
     const result = await this.db
       .prepare(
         `SELECT rt.id, rt.target_id, rt.label, rt.scope, rt.expires_at,
+                rt.no_expire,
                 rt.last_used_at, rt.revoked_at, rt.created_by, rt.created_at,
                 r.registration_revision, r.worker_label, r.registered_at,
                 rt.rotated_from_id, rt.replaced_by_id
@@ -117,6 +122,7 @@ export class RegistrationTokenRepository {
     targetId: string;
     label: string;
     expiresInDays: number;
+    noExpire: boolean;
     actor: string;
     now: number;
     idempotency: SensitiveIdempotencyInput;
@@ -125,7 +131,8 @@ export class RegistrationTokenRepository {
     targetId: string;
     label: string;
     token: string;
-    expiresAt: string;
+    expiresAt: string | null;
+    noExpire: boolean;
   }> {
     if (!getTargetManifest(input.targetId)) {
       throw new DomainError(
@@ -164,12 +171,16 @@ export class RegistrationTokenRepository {
       };
     }
     const id = crypto.randomUUID();
-    const expiresAt = input.now + input.expiresInDays * 24 * 60 * 60 * 1000;
+    const noExpire = input.noExpire === true;
+    const expiresAt = noExpire
+      ? NO_EXPIRY_TIMESTAMP
+      : input.now + input.expiresInDays * 24 * 60 * 60 * 1000;
     const safeResult = {
       id,
       targetId: input.targetId,
       label: input.label,
-      expiresAt: new Date(expiresAt).toISOString(),
+      expiresAt: noExpire ? null : new Date(expiresAt).toISOString(),
+      noExpire,
     };
     try {
       await this.db.batch([
@@ -177,8 +188,9 @@ export class RegistrationTokenRepository {
         this.db
           .prepare(
             `INSERT INTO registration_tokens (
-               id, target_id, label, token_hash, expires_at, created_by, created_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+               id, target_id, label, token_hash, expires_at, no_expire,
+               created_by, created_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             id,
@@ -186,6 +198,7 @@ export class RegistrationTokenRepository {
             input.label,
             await sha256Hex(rawToken),
             expiresAt,
+            noExpire ? 1 : 0,
             input.actor,
             input.now,
           ),
@@ -202,7 +215,8 @@ export class RegistrationTokenRepository {
             JSON.stringify({
               targetId: input.targetId,
               label: input.label,
-              expiresAt,
+              expiresAt: noExpire ? null : expiresAt,
+              noExpire,
             }),
             input.now,
           ),
@@ -297,6 +311,7 @@ export class RegistrationTokenRepository {
   async rotate(input: {
     id: string;
     expiresInDays: number;
+    noExpire?: boolean;
     actor: string;
     now: number;
     idempotency: SensitiveIdempotencyInput;
@@ -305,7 +320,8 @@ export class RegistrationTokenRepository {
     targetId: string;
     label: string;
     token: string;
-    expiresAt: string;
+    expiresAt: string | null;
+    noExpire: boolean;
     rotatedFromId: string;
   }> {
     const idempotency = await this.prepareSensitiveIdempotency(
@@ -328,7 +344,7 @@ export class RegistrationTokenRepository {
     }
     const current = await this.db
       .prepare(
-        `SELECT id, target_id, label, expires_at, revoked_at, replaced_by_id
+        `SELECT id, target_id, label, expires_at, no_expire, revoked_at, replaced_by_id
          FROM registration_tokens WHERE id = ? LIMIT 1`,
       )
       .bind(input.id)
@@ -337,6 +353,7 @@ export class RegistrationTokenRepository {
         target_id: string;
         label: string;
         expires_at: number;
+        no_expire: number;
         revoked_at: number | null;
         replaced_by_id: string | null;
       }>();
@@ -350,18 +367,22 @@ export class RegistrationTokenRepository {
     if (
       current.revoked_at !== null ||
       current.replaced_by_id !== null ||
-      current.expires_at <= input.now
+      (current.no_expire !== 1 && current.expires_at <= input.now)
     ) {
       throw tokenNotActive();
     }
 
     const id = crypto.randomUUID();
-    const expiresAt = input.now + input.expiresInDays * 24 * 60 * 60 * 1000;
+    const noExpire = input.noExpire ?? current.no_expire === 1;
+    const expiresAt = noExpire
+      ? NO_EXPIRY_TIMESTAMP
+      : input.now + input.expiresInDays * 24 * 60 * 60 * 1000;
     const safeResult = {
       id,
       targetId: current.target_id,
       label: current.label,
-      expiresAt: new Date(expiresAt).toISOString(),
+      expiresAt: noExpire ? null : new Date(expiresAt).toISOString(),
+      noExpire,
       rotatedFromId: current.id,
     };
     try {
@@ -370,9 +391,9 @@ export class RegistrationTokenRepository {
         this.db
           .prepare(
             `INSERT INTO registration_tokens (
-               id, target_id, label, token_hash, expires_at, created_by,
-               created_at, rotated_from_id
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+               id, target_id, label, token_hash, expires_at, no_expire,
+               created_by, created_at, rotated_from_id
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             id,
@@ -380,6 +401,7 @@ export class RegistrationTokenRepository {
             current.label,
             await sha256Hex(rawToken),
             expiresAt,
+            noExpire ? 1 : 0,
             input.actor,
             input.now,
             current.id,
@@ -389,7 +411,7 @@ export class RegistrationTokenRepository {
             `UPDATE registration_tokens
              SET revoked_at = ?, replaced_by_id = ?
              WHERE id = ? AND revoked_at IS NULL AND replaced_by_id IS NULL
-               AND expires_at > ?`,
+               AND (no_expire = 1 OR expires_at > ?)`,
           )
           .bind(input.now, id, current.id, input.now),
         this.db.prepare(
@@ -410,7 +432,8 @@ export class RegistrationTokenRepository {
             JSON.stringify({
               replacementTokenId: id,
               targetId: current.target_id,
-              expiresAt,
+              expiresAt: noExpire ? null : expiresAt,
+              noExpire,
             }),
             input.now,
           ),
@@ -509,12 +532,14 @@ export class RegistrationTokenRepository {
 
 function serializeToken(value: unknown): RegistrationTokenView {
   const row = tokenListRowSchema.parse(value);
+  const noExpire = row.no_expire === 1;
   return {
     id: row.id,
     targetId: row.target_id,
     label: row.label,
     scope: row.scope,
-    expiresAt: toIso(row.expires_at),
+    expiresAt: noExpire ? null : toIso(row.expires_at),
+    noExpire,
     lastUsedAt: nullableIso(row.last_used_at),
     revokedAt: nullableIso(row.revoked_at),
     createdBy: row.created_by,

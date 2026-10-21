@@ -23,7 +23,7 @@
 6. 构建 UI，部署平台 Worker。
 7. 显式同步 Target 元数据。
 8. 验证本地管理员登录、Target describe 和 JSON 404。
-9. 在控制台为物理 Target 签发 Registration Token，将其写为对应业务 Worker Secret。
+9. 在控制台为物理 Target 签发 Registration Token（默认有有效期；只有受控部署凭据才选择「永不过期」），将其写为对应业务 Worker Secret。
 10. 由业务 Worker 发布完整 Registration，检查 Action、Schedule 和成功率样本。
 11. 等待测试 Schedule 的下一次定时发生并确认结果。
 

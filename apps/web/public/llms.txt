@@ -58,8 +58,8 @@ Never place administrator passwords, session cookies, Registration Tokens, Cloud
 - [Run execution again](/api/v1/executions/{executionId}/rerun): `POST`; JSON `{ "confirmRisk": true }`; creates a child Execution with a new idempotency key.
 - [Cancel execution](/api/v1/executions/{executionId}/cancel): `POST`; JSON `{}`; only valid for waiting states, never force-kills running RPC.
 - [Resolve unknown execution](/api/v1/executions/{executionId}/resolve): `POST`; JSON `{ "resolution": "confirmed_succeeded"|"confirmed_failed"|"abandon", "note": string, "confirmRisk": true }`.
-- [Issue Registration Token](/api/v1/registration-tokens): `POST`; JSON `{ "targetId", "label", "expiresInDays"? }`; the raw token appears exactly once.
-- [Rotate Registration Token](/api/v1/registration-tokens/{tokenId}/rotate): `POST`; JSON `{ "expiresInDays"? }`; atomically issues a replacement and revokes the old token.
+- [Issue Registration Token](/api/v1/registration-tokens): `POST`; JSON `{ "targetId", "label", "expiresInDays"?, "noExpire"? }`; `noExpire: true` creates a revocable token without time expiry; the raw token appears exactly once.
+- [Rotate Registration Token](/api/v1/registration-tokens/{tokenId}/rotate): `POST`; JSON `{ "expiresInDays"?, "noExpire"? }`; omitted `noExpire` preserves the old token's setting, then atomically issues a replacement and revokes the old token.
 - [Revoke Registration Token](/api/v1/registration-tokens/{tokenId}/revoke): `POST`; JSON `{}`; blocks future Registration without deleting the current declaration.
 - [Pause all dispatch](/api/v1/system/pause): `POST`; JSON `{}`; persists the global dispatch safety switch.
 - [Resume all dispatch](/api/v1/system/resume): `POST`; JSON `{}`; clears the global switch without overriding Target or Schedule guards.

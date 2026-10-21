@@ -36,7 +36,7 @@ Execution 保持 running，租约到期后恢复为 unknown 或安全 retry_wait
 - Schedule 配置：只读，来自 Worker Registration；管理员不创建、编辑或归档。
 - Pause / Resume：只修改独立 Operator Override；Worker 重新注册不能清除暂停。
 - Target disable / enable：物理派发安全开关，不修改 Worker 声明。
-- Registration Token rotate：在同一事务中签发替换 Token 并撤销旧 Token；新原始值仍只显示一次。
+- Registration Token rotate：在同一事务中签发替换 Token 并撤销旧 Token；新原始值仍只显示一次。轮换默认继承原 Token 的「永不过期」属性，API 可显式切换。
 - Retry：同一 Execution、同一幂等键、新 Attempt；仅当不可变快照与当前同版本 Action 都声明幂等时可用，并受 7 天窗口和 Attempt 总上限 10 约束。
 - Run again：新 Execution、新幂等键、记录 parent；可能重复业务副作用。
 - Cancel：仅 pending/retry_wait；running 不可强杀。

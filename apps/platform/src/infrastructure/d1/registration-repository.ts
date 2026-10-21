@@ -557,7 +557,7 @@ export class RegistrationRepository {
         .prepare(
           `SELECT 1 AS active FROM registration_tokens
            WHERE id = ? AND target_id = ? AND scope = 'registration:write'
-             AND revoked_at IS NULL AND expires_at > ? LIMIT 1`,
+             AND revoked_at IS NULL AND (no_expire = 1 OR expires_at > ?) LIMIT 1`,
         )
         .bind(principal.tokenId, principal.targetId, now)
         .first();
@@ -664,7 +664,7 @@ export class RegistrationRepository {
         `SELECT CASE WHEN EXISTS (
            SELECT 1 FROM registration_tokens
            WHERE id = ? AND target_id = ? AND scope = 'registration:write'
-             AND revoked_at IS NULL AND expires_at > ?
+             AND revoked_at IS NULL AND (no_expire = 1 OR expires_at > ?)
          ) THEN 1 ELSE json('') END AS token_guard`,
       )
       .bind(principal.tokenId, principal.targetId, now);

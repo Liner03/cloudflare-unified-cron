@@ -147,7 +147,7 @@ describe("dashboard Queue and RPC read model", () => {
     expect(
       execute.mock.calls.map(([request]) => request.attemptNumber),
     ).toEqual([1, 2]);
-    const { data } = await new OverviewRepository(env.DB).read(Date.now());
+    const { data } = await new OverviewRepository(env.DB).read(now);
     expect(data.successRates[0]?.firstAttempt).toMatchObject({
       numerator: 0,
       denominator: 1,
@@ -185,7 +185,7 @@ describe("dashboard Queue and RPC read model", () => {
     );
     expect(row?.businessAttempts).toBe(1);
     expect(execute.mock.calls[0]?.[0].attemptNumber).toBe(1);
-    const { data } = await new OverviewRepository(env.DB).read(Date.now());
+    const { data } = await new OverviewRepository(env.DB).read(now);
     expect(data.successRates[0]?.firstAttempt).toMatchObject({
       numerator: 1,
       denominator: 1,
