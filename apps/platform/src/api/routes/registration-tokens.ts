@@ -10,12 +10,14 @@ const createTokenSchema = z
     targetId: z.string().min(1).max(128),
     label: z.string().trim().min(1).max(100),
     expiresInDays: z.number().int().min(1).max(365).default(90),
+    noExpire: z.boolean().default(false),
   })
   .strict();
 
 const rotateTokenSchema = z
   .object({
     expiresInDays: z.number().int().min(1).max(365).default(90),
+    noExpire: z.boolean().optional(),
   })
   .strict();
 
@@ -64,6 +66,7 @@ export function registerRegistrationTokenRoutes(app: ApiRouter): void {
       {
         id: context.req.param("id"),
         expiresInDays: input.expiresInDays,
+        ...(input.noExpire === undefined ? {} : { noExpire: input.noExpire }),
         actor,
         now: Date.now(),
         idempotency: tokenIdempotency(

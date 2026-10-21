@@ -52,7 +52,8 @@ interface RevealedToken {
   token: string;
   targetId: string;
   label: string;
-  expiresAt: string;
+  expiresAt: string | null;
+  noExpire: boolean;
   rotatedFromId?: string | undefined;
 }
 
@@ -64,6 +65,7 @@ const issueTokenFormSchema = z.object({
     .min(1, "请输入用途标签")
     .max(100, "标签不能超过 100 个字符"),
   expiresInDays: z.enum(["30", "90", "180", "365"]),
+  noExpire: z.boolean(),
 });
 type IssueTokenFormValues = z.infer<typeof issueTokenFormSchema>;
 
@@ -74,8 +76,14 @@ export function RegistrationsPage() {
   const [copied, setCopied] = useState(false);
   const issueForm = useForm<IssueTokenFormValues>({
     resolver: zodResolver(issueTokenFormSchema),
-    defaultValues: { targetId: "", label: "", expiresInDays: "90" },
+    defaultValues: {
+      targetId: "",
+      label: "",
+      expiresInDays: "90",
+      noExpire: false,
+    },
   });
+  const noExpire = issueForm.watch("noExpire");
   const tokens = useQuery({
     queryKey: ["registration-tokens"],
     queryFn: ({ signal }) =>
@@ -93,12 +101,18 @@ export function RegistrationsPage() {
           targetId: values.targetId,
           label: values.label,
           expiresInDays: Number(values.expiresInDays),
+          noExpire: values.noExpire,
         },
         issuedRegistrationTokenSchema,
       ),
     onSuccess: async ({ data }) => {
       setIssueOpen(false);
-      issueForm.reset({ targetId: "", label: "", expiresInDays: "90" });
+      issueForm.reset({
+        targetId: "",
+        label: "",
+        expiresInDays: "90",
+        noExpire: false,
+      });
       setRevealed(data);
       setCopied(false);
       await queryClient.invalidateQueries({
@@ -123,10 +137,10 @@ export function RegistrationsPage() {
       toast.error("无法撤销 Token", { description: errorMessage(error) }),
   });
   const rotate = useMutation({
-    mutationFn: (id: string) =>
+    mutationFn: (input: { id: string; noExpire: boolean }) =>
       apiMutate(
-        `/api/v1/registration-tokens/${id}/rotate`,
-        { expiresInDays: 90 },
+        `/api/v1/registration-tokens/${input.id}/rotate`,
+        { expiresInDays: 90, noExpire: input.noExpire },
         issuedRegistrationTokenSchema,
       ),
     onSuccess: async ({ data }) => {
@@ -174,6 +188,7 @@ export function RegistrationsPage() {
                   targetId: targetValues[0]?.id ?? "",
                   label: "",
                   expiresInDays: "90",
+                  noExpire: false,
                 });
               }
             }}
@@ -253,6 +268,7 @@ export function RegistrationsPage() {
                   <Label htmlFor="token-expiry">有效期</Label>
                   <Select
                     aria-required="true"
+                    disabled={noExpire}
                     id="token-expiry"
                     {...issueForm.register("expiresInDays")}
                   >
@@ -262,6 +278,23 @@ export function RegistrationsPage() {
                     <option value="365">365 天</option>
                   </Select>
                 </div>
+                <label className="flex items-start gap-3 text-sm">
+                  <Input
+                    aria-describedby="token-no-expire-help"
+                    className="mt-0.5 size-4 shrink-0"
+                    type="checkbox"
+                    {...issueForm.register("noExpire")}
+                  />
+                  <span>
+                    <span className="font-semibold">永不过期</span>
+                    <span
+                      className="mt-1 block text-xs text-muted-foreground"
+                      id="token-no-expire-help"
+                    >
+                      仍可手动撤销或轮换；只建议用于受控的部署凭据。
+                    </span>
+                  </span>
+                </label>
                 {issue.isError ? (
                   <p className="text-sm text-destructive" role="alert">
                     {errorMessage(issue.error)}
@@ -369,7 +402,9 @@ export function RegistrationsPage() {
                     {tokenValues.map((token) => {
                       const status = token.revokedAt
                         ? "revoked"
-                        : Date.parse(token.expiresAt) <= now
+                        : !token.noExpire &&
+                            token.expiresAt !== null &&
+                            Date.parse(token.expiresAt) <= now
                           ? "expired"
                           : "active";
                       return (
@@ -390,7 +425,9 @@ export function RegistrationsPage() {
                             {formatTime(token.lastUsedAt)}
                           </TableCell>
                           <TableCell className="tabular text-xs">
-                            {formatTime(token.expiresAt)}
+                            {token.noExpire
+                              ? "永不过期"
+                              : formatTime(token.expiresAt)}
                           </TableCell>
                           <TableCell>
                             <StatusBadge status={status} />
@@ -401,7 +438,12 @@ export function RegistrationsPage() {
                                 <ActionConfirm
                                   confirmLabel="轮换并撤销旧 Token"
                                   description="平台会原子签发替换 Token 并撤销旧值；新值仍只显示一次。"
-                                  onConfirm={() => rotate.mutate(token.id)}
+                                  onConfirm={() =>
+                                    rotate.mutate({
+                                      id: token.id,
+                                      noExpire: token.noExpire,
+                                    })
+                                  }
                                   title="轮换这个 Registration Token？"
                                   trigger={
                                     <Button
@@ -483,7 +525,11 @@ export function RegistrationsPage() {
                 <dt>标签</dt>
                 <dd>{revealed.label}</dd>
                 <dt>到期</dt>
-                <dd>{formatTime(revealed.expiresAt)}</dd>
+                <dd>
+                  {revealed.noExpire
+                    ? "永不过期"
+                    : formatTime(revealed.expiresAt)}
+                </dd>
               </dl>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button onClick={() => void copy()} variant="outline">

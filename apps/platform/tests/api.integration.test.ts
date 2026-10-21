@@ -75,7 +75,14 @@ describe("registered control plane API", () => {
   it("issues a one-target token and stores only its SHA-256 hash", async () => {
     const response = await issueToken();
     expect(response.status).toBe(200);
-    const value = await response.json();
+    const value = await response.json<{
+      data: {
+        id: string;
+        token: string;
+        noExpire: boolean;
+        expiresAt: string | null;
+      };
+    }>();
     const token = readString(value, "token");
     expect(token).toMatch(/^ucrt_[A-Za-z0-9_-]{43}$/);
 
@@ -88,6 +95,54 @@ describe("registered control plane API", () => {
 
     const listed = await adminGet("/api/v1/registration-tokens");
     expect(JSON.stringify(await listed.json())).not.toContain(token);
+  });
+
+  it("supports a no-expire token that remains valid past its stored timestamp", async () => {
+    const response = await adminMutate("/api/v1/registration-tokens", {
+      targetId: "DATA",
+      label: "permanent deployment",
+      expiresInDays: 1,
+      noExpire: true,
+    });
+    expect(response.status).toBe(200);
+    const value = await response.json<{
+      data: {
+        id: string;
+        token: string;
+        noExpire: boolean;
+        expiresAt: string | null;
+      };
+    }>();
+    const token = readString(value, "token");
+    const id = readString(value, "id");
+    expect(value.data).toMatchObject({ noExpire: true, expiresAt: null });
+
+    await env.DB.prepare(
+      "UPDATE registration_tokens SET expires_at = 0 WHERE id = ?",
+    )
+      .bind(id)
+      .run();
+    expect((await register(token, baseRegistration)).status).toBe(200);
+
+    const listed = await adminGet("/api/v1/registration-tokens");
+    await expect(listed.json()).resolves.toMatchObject({
+      data: [
+        expect.objectContaining({
+          id,
+          noExpire: true,
+          expiresAt: null,
+        }),
+      ],
+    });
+
+    const rotated = await adminMutate(
+      `/api/v1/registration-tokens/${id}/rotate`,
+      {},
+    );
+    expect(rotated.status).toBe(200);
+    await expect(rotated.json()).resolves.toMatchObject({
+      data: { noExpire: true, expiresAt: null },
+    });
   });
 
   it("updates scheduler capacity with optimistic concurrency and idempotent replay", async () => {

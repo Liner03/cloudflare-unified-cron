@@ -18,7 +18,7 @@ The Registrant Worker may only publish its own complete Registration. It owns Ac
 
 V1 has one Local Administrator. The username is non-secret configuration and the password hash is a required Worker Secret. Login produces an opaque, revocable D1-backed Admin Session delivered in an HttpOnly, SameSite cookie. Production uses a Secure `__Host-` cookie; local development uses an equivalent non-Secure loopback cookie.
 
-Registration Tokens contain at least 256 random bits, are displayed once, and are stored only as SHA-256 hashes. Each token is bound server-side to one physical Target, has an expiry, can be revoked, and has only `registration:write`. The raw token belongs in the Registrant Worker's Worker Secret.
+Registration Tokens contain at least 256 random bits, are displayed once, and are stored only as SHA-256 hashes. Each token is bound server-side to one physical Target, has only `registration:write`, and can be revoked. Tokens normally expire after the selected 1–365 day window; an explicitly marked `noExpire` Token skips time expiry but remains revocable and rotatable. The raw token belongs in the Registrant Worker's Worker Secret.
 
 Rotation creates a replacement Token and revokes the previous Token in one D1 transaction. The replacement raw value is also shown once; stored records retain `rotated_from` / `replaced_by` linkage for audit.
 
